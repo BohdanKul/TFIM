@@ -151,8 +151,8 @@ int TFIM::DiagonalMove()
     if (ldebug){
         cout << "---Diagonal Update" << endl;
         printOperators();
-        printIntVector(&ap.spins, "   Prop: ");
-        printIntVector(&lattice.spins, "   Latt: ");
+        ap.printSpins();
+        lattice.printSpins();
         lattice.printBonds();
     }
     //printIntVector(&lLast,  "Last");
@@ -217,8 +217,8 @@ int TFIM::DiagonalMove()
             ap.flipSiteSpin(oper->index);
             if (ldebug){
                 cout << "   offd: " << oper->index << endl;
-                printIntVector(&ap.spins, "   Prop: ");
-                printIntVector(&lattice.spins, "   Latt: ");
+                ap.printSpins();
+                lattice.printSpins();
             }
            
             // Accumulate magnetization per site measurement 
@@ -269,8 +269,8 @@ int TFIM::VertexType(int otype, int index, Spins& ap)
     if (debug){
         cout << endl << "---Vertex Type" << endl;
         //printOperators();
-        printIntVector(&ap.spins, "   Prop: ");
-        printIntVector(&lattice.spins, "   Latt: ");
+        ap.printSpins();
+        lattice.printSpins();
         lattice.printBonds();
         cout << "   type: " << otype << "   index: " << index << endl << endl;
     }
@@ -393,8 +393,8 @@ void TFIM::ConstructLinks()
 
     if (ldebug){
         cout << "---Construct links " << endl;
-        printIntVector(&ap.spins, "   Prop: ");
-        printIntVector(&lattice.spins, "   Latt: ");
+        ap.printSpins();
+        lattice.printSpins();
         printOperators();
     }
     // Start linked list construction
@@ -461,8 +461,8 @@ void TFIM::ConstructLinks()
 
     if (ldebug){
         cout << endl << "   Construct links. " << endl;
-        printIntVector(&ap.spins, "   Prop: ");
-        printIntVector(&lattice.spins, "   Latt: ");
+        ap.printSpins();
+        lattice.printSpins();
     }
     //cout << "    Construct links. " << endl;
 }

@@ -15,11 +15,11 @@ Communicator::Communicator(Lattice * const lattice, float _beta, float _h, long 
     // Determine the filename 
     if (lattice->getName()=="chimera")
        dataName = boost::str(boost::format("01-%03d-%03d-b%06.3f-h%06.3f-x%02d-y%02d") 
-                      %lattice->x %lattice->y %_beta%_h%lattice->unitx%lattice->unity);
+                      %lattice->getWidth() %lattice->getHeight() %_beta%_h%lattice->getUnitWidth()%lattice->getUnitHeight());
     
     if (lattice->getName()=="rectangle")
        dataName = boost::str(boost::format("01-%03d-%03d-b%06.3f-h%06.3f") 
-                      %lattice->x %lattice->y %_beta%_h);
+                      %lattice->getWidth() %lattice->getHeight() %_beta%_h);
     
 
     //Add the seed value to the filename
