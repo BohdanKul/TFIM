@@ -14,65 +14,89 @@ using namespace std;
 class Spins
 {
     public:
-        Spins(int _Nsites);
-        Spins(int _Nsites, long _seed);
+        Spins(int _Nspins);                // initialize spins to 1
+        Spins(int _Nspins, long _seed);    // initialize spins to a random
+                                           // distribution of +1/-1 
+        int  getSpin(int index);           // get the spin state
+        void setSpin(int index, int val);  // set the spin state
+        int  getSize() {return Nspins;};   // get the total number of spins 
+        void flipSiteSpin(int index);      // flip the spin
+        void printSpins();                 // print out the spins state
+    
         //Spins operator=(const Spins& clone)
         //    {Nsites = clone.Nsites; spins = clone.spins; return *this;};
-        int  getSpin(int index);           // get the spin state
-        void setSpin(int index, int val);  // set the spin value
-        void flipSiteSpin(int index);      // flip a particular spin
-        int  getSize() {return Nsites;};
-        void printSpins();
-    //protected:
-        int Nsites;           // number of sites
-        vector<int> spins;    // list of spin variables
+    protected:
+        int Nspins;           // number of sites
+        vector<int> spins;    // current spins state
 };
 
 
 
 /******************************************************************************
- *A container class holding information about 2 sites of a bond
+ * Class holding coordinates of 2 sites belonging to a bond
  *****************************************************************************/
 class tBond
 {
     public:
-        int A;
-        int B;
-        tBond(): A(-1), B(-1) {};
-        tBond(int x, int y): A(x), B(y) {};
-        tBond set(int x, int y){ A = x; B = y; return *this;};
+
+        tBond(): A(-1), B(-1) {};           // initiate the bond to default values
+        tBond(int x, int y): A(x), B(y) {}; // initiate it to user-defined values  
+
+        tBond set(int x, int y)             // reset it to new values
+            { A = x; B = y; return *this;};
+        pair<int,int> get(){return pair<int,int>(A,B);}; // get bond sites 
+        void print(){cout<<"("<<A<<","<<B<<")\n";};      //print the bond
+    protected:
+        int A; // indices of two sites belonging to the bond 
+        int B; 
 };
 
 /******************************************************************************
- * Base lattice class. 
- * Defines bonds operating on top of the spins structure it inherites. 
+ * Virtual lattice class that adds a bonds structure operating on 
+ * top of the spins structure it inherites. This new structure 
+ * defines physical bonds existing between spins. This class only
+ * implements the necessary functionality to deal with this new
+ * structure without actually setting it up. In order to define 
+ * a physical lattice with real bonds, one needs to inherit this 
+ * class and define them in the constructors of the new class. 
+ * (see rectangle and chimera classes) 
  *****************************************************************************/
 class Lattice: public Spins
 {
     public:
-        Lattice(int _x, int _y, int _unitx, int _unity, long _seed);
+        Lattice(int _x, int _y, int _unitx,  // initialize lattice geometry and
+                int _unity, long _seed);     // set its spins state to a random state
+
         pair<int,int> getSites(int index);   // get sites associated with a bond
         pair<int,int> getSpins(int index);   // get spins associated with a bond
         void flipBondSpins(int index);       // flip spins belonging to a bond
         void setBond(int siteA, int siteB);  // create a bond between two sites
-        void printBonds();
-        int  getBondsN(){ return Nbonds;};
-        string& getName(){return name;};
+        
+        void printBonds();                   // print out all bonds 
+        int  getBondsN(){ return Nbonds;};   // get the number of bonds
+        string& getName(){return name;};     // get the lattice name
 
-        int unitx;  // unit cell width
-        int unity;  // unit cell height
-        int x;      // lattice width (in terms of unit cells)
-        int y;      // lattice height
+        int getWidth(){return x;};           // get lattice parameters
+        int getHeight(){return y;};          //
+        int getUnitWidth(){return unitx;};   //
+        int getUnitHeight(){return unity;};  //
     protected:
-        string name;
-        vector<tBond> bonds;  // list of bonds between those spins  
-        int Nbonds; // number of bonds
+        string name;          // lattice-type name
+        
+        vector<tBond> bonds;  // vector of bonds
+        int Nbonds;           // number of bonds
+
+        int unitx;  // unit cell width and height (in terms of spins)
+        int unity;  
+        int x;      // lattice width and height (in terms of unit cells)
+        int y;      
 
 };
 
 
+
 /******************************************************************************
- * Rectangular lattice class
+ * Rectangular lattice class with periodic and open boundary conditions
  *****************************************************************************/
 class Rectangle: public Lattice
 {
@@ -80,8 +104,11 @@ class Rectangle: public Lattice
         Rectangle(int _x, int _y, bool _OBC, long _seed);
 };
 
+
+
 /******************************************************************************
- * Chimera lattice class
+ * Chimera lattice class as implemented by Dwave. 
+ * It assumes that the width of its unit cell is always kept to 2 spins
  *****************************************************************************/
 class Chimera: public Lattice
 {
