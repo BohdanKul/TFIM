@@ -246,9 +246,18 @@ Rectangle::Rectangle(int _x, int _y, bool _OBC = false, long _seed = 0):
  * directly underneath it, etc. Once the count reaches the bottom left spin in the
  * current unit cell, it switches to the the upper-most spin located in the next
  * column of the same unit cell. Once all spins in the unit cell are enumerated,
- * the count continues with the next unit cell located underneath the initial one.
- * The sequence of unit cells is the same snake-like sequence as the one used
- * within a unit cell.
+ * the count continues with the unit cell on the right to the initial one.
+ * In this way, all unit cells in the first row are enumerated. Then, it continues
+ * to label sites in the second row in the same way.
+
+ * Here is an example of chimera graph labelling convention for 2x2 grid with
+ * 2x2 sites within each unit cell:
+
+ *  0  2    4  6  
+ *  1  3    5  7
+ * 
+ *  8 10   12 14 
+ *  9 11   13 15
  *****************************************************************************/
 Chimera::Chimera(int _x, int _y, long _seed = 0, int _unity = 4):
     Lattice(_x, _y, 2, _unity, _seed) 
@@ -267,7 +276,7 @@ Chimera::Chimera(int _x, int _y, long _seed = 0, int _unity = 4):
             
             // Determine lattice coordinates of upper,
             // left-most  spin in the current unit cell
-            LTspin = (2*unity)*(i + y*j); 
+            LTspin = (2*unity)*(x*i + j); 
             
             // Add internal bonds within the current unit cell
             for (int k=0; k!=unity; k++){
@@ -281,7 +290,7 @@ Chimera::Chimera(int _x, int _y, long _seed = 0, int _unity = 4):
             if (i != y-1){
                 for (int k=0; k!=unity; k++){
                     siteA = LTspin + k;
-                    siteB = LTspin + k + 2*unity; 
+                    siteB = LTspin + k + 2*unity*x; 
                     setBond(siteA,siteB);
                 }
             }
@@ -289,7 +298,7 @@ Chimera::Chimera(int _x, int _y, long _seed = 0, int _unity = 4):
             if  (j != x-1){
                 for (int k=0; k!= unity; k++){
                     siteA = LTspin + unity + k;
-                    siteB = LTspin + unity + k + 2*unity*y;
+                    siteB = LTspin + unity + k + 2*unity;
                     setBond(siteA,siteB);
                 }
             }
