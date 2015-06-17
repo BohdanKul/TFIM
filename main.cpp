@@ -2,6 +2,7 @@
 #include <boost/format.hpp> 
 #include <boost/program_options.hpp>
 #include "tfim.h" 
+#include <iostream>
 
 using namespace std;
 namespace po = boost::program_options;
