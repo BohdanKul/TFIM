@@ -33,22 +33,32 @@ class Spins
 
 
 /******************************************************************************
- * Class holding coordinates of 2 sites belonging to a bond
+ * Class holding coordinates of 2 sites belonging to a bond, 
+ * as well as its strength value.
  *****************************************************************************/
 class tBond
 {
     public:
 
-        tBond(): A(-1), B(-1) {};           // initiate the bond to default values
-        tBond(int x, int y): A(x), B(y) {}; // initiate it to user-defined values  
+        tBond(): A(-1), B(-1), strength(-1); {};                  // initiate the bond to default values
+        tBond(int x, int y): A(x), B(y), strength(-1) {};         // initiate bond's spins to user-defined indices  
+        tBond(int x, int y, float s): A(x), B(y), strength(s) {}; // initiate bond's spins and bond's strength to 
+                                                                  // user-defined values
 
-        tBond set(int x, int y)             // reset it to new values
+        tBond set(int x, int y)            // reset bond's spins to new values
             { A = x; B = y; return *this;};
-        pair<int,int> get(){return pair<int,int>(A,B);}; // get bond sites 
-        void print(){cout<<"("<<A<<","<<B<<")\n";};      //print the bond
+        tBond set(int x, int y, float s)   // reset bond's spins and value it to new values
+            { A = x; B = y; strength = s; return *this;};
+        pair<int,int> get()                // get the indices of bond's spins 
+            {return pair<int,int>(A,B);};
+        float  getStrength()               // get bond's strength
+            {return strength;}; 
+        void print()                       // print the bond
+            {cout<<"("<<A<<","<<B<<")="<<strength<<"\n";};  
     protected:
-        int A; // indices of two sites belonging to the bond 
+        int A;          // indices of two sites belonging to the bond 
         int B; 
+        float strength; // bond strength as dictated by underlying Hamiltonian
 };
 
 /******************************************************************************
