@@ -2,8 +2,9 @@
 #define COMMUNICATOR_H
 
 #include <fstream>
-#include <vector>
 #include <unordered_map>
+#include <boost/format.hpp>
+#include <boost/filesystem.hpp>
 #include "lattice.h"
 
 using namespace std;

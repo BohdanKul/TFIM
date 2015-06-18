@@ -3,7 +3,8 @@
 
 #include <string.h>
 #include <vector>
-#include "randombase.cpp"
+#include <iostream>
+#include "randombase.h"
 using namespace std;
 
 

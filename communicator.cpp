@@ -1,8 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include "communicator.h"
-#include <boost/format.hpp>
-#include <boost/filesystem.hpp>
 #include <time.h>
 
 using namespace std;

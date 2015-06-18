@@ -2,11 +2,8 @@
 #define TFIM_H
 
 #include <stack>
-#include <vector>
 #include <list>
 #include "communicator.h"
-//#include "randombase.h"
-#include "lattice.h"
 
 using namespace std;
 

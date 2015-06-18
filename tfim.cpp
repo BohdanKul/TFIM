@@ -1,11 +1,6 @@
 #include <string.h>
-#include <stack>
-#include <vector>
 #include <math.h>
 #include "tfim.h"
-#include "communicator.cpp"
-//#include "randombase.cpp"
-#include "lattice.cpp"
 
 TFIM::TFIM(Lattice* const _lattice, long _seed, float _beta, float _h, long _binSize):
     RandomBase(_seed),  // initialize ancestor

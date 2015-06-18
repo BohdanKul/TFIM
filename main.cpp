@@ -1,7 +1,8 @@
 #include <string.h>
 #include <boost/format.hpp> 
 #include <boost/program_options.hpp>
-#include "tfim.cpp" 
+#include "tfim.h" 
+#include <iostream>
 
 using namespace std;
 namespace po = boost::program_options;
