@@ -85,28 +85,6 @@ void Spins::printSpins()
 
 
 /*****************************************************************************
- * Base lattice constructor.
- * Initiate spins in a random state and set up the basic geometry.
- *****************************************************************************/
-Lattice::Lattice(int _x, int _y, int _unitx, int _unity, long _seed):
-    Spins(_unitx*_unity*_x*_y, _seed)  // initialize the parental class
-/*
-    _seed - random seed generator
-*/
-{
-    name = "general lattice";
-
-    // Set up geometric parameters of the underlying lattice
-    unitx = _unitx;
-    unity = _unity;
-    x     = _x;
-    y     = _y;
-
-    // Bonds are to be defined in daugther classes
-    Nbonds = 0;
-}
-
-/*****************************************************************************
  * Add a new bond 
  *****************************************************************************/
 void Lattice::setBond(int siteA, int siteB)
@@ -130,31 +108,7 @@ pair<int,int> Lattice::getSites(int index)
     return bonds[index].get(); 
 }
 
-/*****************************************************************************
- * Return the state of two spins associated with a bond
- *****************************************************************************/
-pair<int,int> Lattice::getSpins(int index)
-/*
-    index - index of the bond 
-*/
-{
-    pair<int,int> sites = getSites(index);
-    return pair<int,int>  (getSpin(sites.first),getSpin(sites.second));  
-}
 
-
-/*****************************************************************************
- * Flip both spins associated with a bond 
- *****************************************************************************/
-void Lattice::flipBondSpins(int index)
-/*
-    index - index of the bond 
-*/
-{
-    pair<int,int> sites = getSites(index);
-    flipSiteSpin(sites.first);
-    flipSiteSpin(sites.second);
-}
 
 /*****************************************************************************
  * Print out the list of bonds

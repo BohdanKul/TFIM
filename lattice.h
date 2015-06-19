@@ -72,36 +72,23 @@ class tBond
  * class and define them in the constructors of the new class. 
  * (see rectangle and chimera classes) 
  *****************************************************************************/
-class Lattice: public Spins
+class Lattice: 
 {
     public:
-        Lattice(int _x, int _y, int _unitx,  // initialize lattice geometry and
-                int _unity, long _seed);     // set its spins state to a random state
+        Lattice() name("general lattice"), Nbonds(0) {};
 
         pair<int,int> getSites(int index);   // get sites associated with a bond
-        pair<int,int> getSpins(int index);   // get spins associated with a bond
-        void flipBondSpins(int index);       // flip spins belonging to a bond
         void setBond(int siteA, int siteB);  // create a bond between two sites
         
         void printBonds();                   // print out all bonds 
         int  getBondsN(){ return Nbonds;};   // get the number of bonds
         string& getName(){return name;};     // get the lattice name
 
-        int getWidth(){return x;};           // get lattice parameters
-        int getHeight(){return y;};          //
-        int getUnitWidth(){return unitx;};   //
-        int getUnitHeight(){return unity;};  //
     protected:
         string name;          // lattice-type name
         
         vector<tBond> bonds;  // vector of bonds
         int Nbonds;           // number of bonds
-
-        int unitx;  // unit cell width and height (in terms of spins)
-        int unity;  
-        int x;      // lattice width and height (in terms of unit cells)
-        int y;      
-
 };
 
 
@@ -127,4 +114,10 @@ class Chimera: public Lattice
         Chimera(int _x, int _y, long _seed,  int _unity);
 };
 
+
+class Hamiltonian
+{
+    public:
+        Hamiltonian(
+}
 #endif
