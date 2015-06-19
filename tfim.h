@@ -4,6 +4,7 @@
 #include <stack>
 #include <list>
 #include "communicator.h"
+#include "hamiltonian.h"
 
 using namespace std;
 
@@ -37,6 +38,7 @@ class TFIM: public RandomBase
 
     private:
         void resetMeas();         // reset measurement variables to default values
+        void computeDiagProb();   // compute diagonal operators insertation probabilities
         int VertexType(int otype, int index, Spins & ap); // return vertex type based on operator
                                               // type and its index in the list 
         int VtxToOperator(int vtxType);       // return operator type of a vertex type  
@@ -45,6 +47,12 @@ class TFIM: public RandomBase
         void printIntVector(vector<int>* vect, string name );
         void printOperators();
        
+        // Assististing datastructures in the diagonal update
+        vector<float> diagProb;  // cumulative probability of a diagonal element 
+        float bDiagProb;         // cumulative insertation probability  
+                                 // of all bonds diagonal operators
+
+
         // Accumulate measurements for averaging 
         void Accumulate(long from,  long& to);
         void Accumulate(float from, float& to);
@@ -69,7 +77,8 @@ class TFIM: public RandomBase
 
         int LegSpin[8][4];  // vertex types to spin states map
         Lattice& lattice;   // lattice object
-        //Spins   ap;         // propagated in imagenary time spins object
+        Hamiltonian ham;    // class incapsulating spins state and interactions
+        //Spins   ap;       // propagated in imagenary time spins object
 
 
         // Accumulative variables for measurements

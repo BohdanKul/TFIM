@@ -1,5 +1,6 @@
 #include <string.h>
 #include <math.h>
+#include <cmath>
 #include "tfim.h"
 
 TFIM::TFIM(Lattice* const _lattice, long _seed, float _beta, float _h, long _binSize):
@@ -35,6 +36,9 @@ TFIM::TFIM(Lattice* const _lattice, long _seed, float _beta, float _h, long _bin
     nMeas = 0;
 
 
+    // Compute cumulative probabilities of diagonal operators insertation
+    computeDiagProb();
+
     // Define the following map:
     // LegSpin[vertex_type][leg_index] -> spin state
     int tmp[8][4]{  {-1,-1,-1,-1},
@@ -66,6 +70,29 @@ TFIM::TFIM(Lattice* const _lattice, long _seed, float _beta, float _h, long _bin
 
 }
 
+/*****************************************************************************
+ * Compute relative probability of diagonal elements insertion required in 
+ * the diagonal update.
+ *****************************************************************************/
+void TFIM::computeDiagProb()
+{
+  
+    // Attribute probability to each diagonal operator based on its weight
+    diagProb.clear();
+    float runTotal = 0;
+    float Total    = ham.getEtotal();
+    for (auto elem = ham.bonds.begin(); elem!=ham.bonds.end(); elem++){
+        runTotal += 2.0*abs(elem->getStrength());
+        diagProb.push_back(runTotal/Total);
+    }
+    bDiagProb = runTotal/Total;
+
+    for (auto elem = ham.zfield.begin(); elem!=ham.zfield.end(); elem++){
+        runTotal += *elem;
+        diagProb.push_back(runTotal/Total);
+    }
+}
+    
 /******************************************************************************
 * Accumulate estimator measurements 
 ******************************************************************************/
