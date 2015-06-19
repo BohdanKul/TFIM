@@ -92,62 +92,7 @@ void TFIM::computeDiagProb()
         diagProb.push_back(runTotal/Total);
     }
 }
-    
-/******************************************************************************
-* Accumulate estimator measurements 
-******************************************************************************/
-void TFIM::Measure()
-{
-    nMeas += 1;
-    Accumulate(n, an);
-
-    long temp = 0;
-    for (int i=0; i!=Nsites; i++){
-        temp += lattice.getSpin(i);
-    }
-    aTM += pow((float)(temp)/(float)(Nsites),2);
-    // One sufficient number of measurements are taken, record their average
-    if (nMeas == binSize){
-
-        // Record operators list length and average energy per site
-        *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(an/(1.0*binSize)));
-
-        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + J*(float)(Nbonds)/(float)(Nsites) + h;
-        *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %EperSite);
-       //cout << an/(1.0*binSize) << " " << EperSite << " "; 
-
-        // Record the total magnetization
-        if (bM)
-            *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aTM/(1.0*binSize)));
-
-        //cout << aTM/(1.0*binSize*Nsites) << " ";
-        // Record magnetization per site
-        if (bMperSite)
-            for (int j=0; j!=Nsites; j++){
-                *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aMperSite[j]/(1.0*binSize)));
-                //cout << aMperSite[j]/(1.0*binSize) << " ";
-            }
-        //cout << endl;
-        *communicator.stream("estimator") << endl;    
-        
-        // Reset measurement variables to 0
-        resetMeas();
-        cout << ID << ": Measurement taken" << endl;
-    }
-}
-
-
-/**************************************************************
-* Reset measurement variables  
-**************************************************************/
-void TFIM::resetMeas()
-{
-   nMeas = 0;
-   an = 0;
-   if (bMperSite) aMperSite.assign(Nsites,0);
-   if (bM)        aTM =0;
-
-}
+ 
 
 
 /**************************************************************
@@ -187,7 +132,7 @@ int TFIM::DiagonalMove()
         // If it is a null operator, try insert a diagonal one
         if (oper->type == -2){
             // Compute the probability of inserting a diagonal operator
-            AccP = beta*(h*(float)(Nsites) + (2.0*J)*(float)(Nbonds))/(float) (M-n);
+            AccP = beta*(ham.getEtotal())/(float) (M-n);
             if (uRand()<AccP){
                 
                 // If accepted, we can insert either one or two sites operator
@@ -276,6 +221,64 @@ void TFIM::AdjustM()
     lOper.resize(M);
     resetMeas();
 }
+
+/******************************************************************************
+* Accumulate estimator measurements 
+******************************************************************************/
+void TFIM::Measure()
+{
+    nMeas += 1;
+    Accumulate(n, an);
+
+    long temp = 0;
+    for (int i=0; i!=Nsites; i++){
+        temp += lattice.getSpin(i);
+    }
+    aTM += pow((float)(temp)/(float)(Nsites),2);
+    // One sufficient number of measurements are taken, record their average
+    if (nMeas == binSize){
+
+        // Record operators list length and average energy per site
+        *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(an/(1.0*binSize)));
+
+        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + J*(float)(Nbonds)/(float)(Nsites) + h;
+        *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %EperSite);
+       //cout << an/(1.0*binSize) << " " << EperSite << " "; 
+
+        // Record the total magnetization
+        if (bM)
+            *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aTM/(1.0*binSize)));
+
+        //cout << aTM/(1.0*binSize*Nsites) << " ";
+        // Record magnetization per site
+        if (bMperSite)
+            for (int j=0; j!=Nsites; j++){
+                *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aMperSite[j]/(1.0*binSize)));
+                //cout << aMperSite[j]/(1.0*binSize) << " ";
+            }
+        //cout << endl;
+        *communicator.stream("estimator") << endl;    
+        
+        // Reset measurement variables to 0
+        resetMeas();
+        cout << ID << ": Measurement taken" << endl;
+    }
+}
+
+
+/**************************************************************
+* Reset measurement variables  
+**************************************************************/
+void TFIM::resetMeas()
+{
+   nMeas = 0;
+   an = 0;
+   if (bMperSite) aMperSite.assign(Nsites,0);
+   if (bM)        aTM =0;
+
+}
+
+
 
 /**************************************************************
 * Determine the vertex type for a particular operator acting 
