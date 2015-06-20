@@ -1,35 +1,11 @@
-#ifndef LATTICE_H
-#define LATTICE_H
+#ifndef BOND_H
+#define BOND_H
 
 #include <string.h>
 #include <vector>
 #include <iostream>
-#include "randombase.h"
 using namespace std;
 
-
-/******************************************************************************
- * Base spins class. 
- * Defines spins vector structure and basic operations on it.
- *****************************************************************************/
-class Spins
-{
-    public:
-        Spins(int _Nspins);                // initialize spins to 1
-        Spins(int _Nspins, long _seed);    // initialize spins to a random
-                                           // distribution of +1/-1 
-        int  getSpin(int index);           // get the spin state
-        void setSpin(int index, int val);  // set the spin state
-        int  getSize() {return Nspins;};   // get the total number of spins 
-        void flipSiteSpin(int index);      // flip the spin
-        void printSpins();                 // print out the spins state
-    
-        //Spins operator=(const Spins& clone)
-        //    {Nsites = clone.Nsites; spins = clone.spins; return *this;};
-    protected:
-        int Nspins;           // number of sites
-        vector<int> spins;    // current spins state
-};
 
 
 
@@ -41,7 +17,7 @@ class tBond
 {
     public:
 
-        tBond(): A(-1), B(-1), strength(-1); {};                  // initiate the bond to default values
+        tBond(): A(-1), B(-1), strength(-1) {};                  // initiate the bond to default values
         tBond(int x, int y): A(x), B(y), strength(-1) {};         // initiate bond's spins to user-defined indices  
         tBond(int x, int y, float s): A(x), B(y), strength(s) {}; // initiate bond's spins and bond's strength to 
                                                                   // user-defined values
@@ -63,61 +39,67 @@ class tBond
 };
 
 /******************************************************************************
- * Virtual lattice class that adds a bonds structure operating on 
- * top of the spins structure it inherites. This new structure 
- * defines physical bonds existing between spins. This class only
- * implements the necessary functionality to deal with this new
- * structure without actually setting it up. In order to define 
- * a physical lattice with real bonds, one needs to inherit this 
- * class and define them in the constructors of the new class. 
- * (see rectangle and chimera classes) 
+ * Virtual class that serves as a starting point of implementation of bonds 
+ * acting on two sites. This class only  implements the necessary functionality 
+ * to deal with bonds without actually setting them up. In order to define 
+ * physical bonds, one needs to inherit this class and define them in the 
+ * constructors of the new class using setBond() method. For an example, 
+ * see rectangle and chimera classes.
  *****************************************************************************/
-class Lattice: 
+class Bonds 
 {
     public:
-        Lattice() name("general lattice"), Nbonds(0) {};
+             
+        Bonds(): name("general"), Nbonds(0), x(-1), y(-1), unitx(-1), unity(-1) {};
 
-        pair<int,int> getSites(int index);   // get sites associated with a bond
-        void setBond(int siteA, int siteB);  // create a bond between two sites
+        void setBond(int _siteA, int _siteB);                  // set bond between two sites
+        void setBond(int _siteA, int _siteB, float _strength);  // same but with a specific strength value
         
-        void printBonds();                   // print out all bonds 
-        int  getBondsN(){ return Nbonds;};   // get the number of bonds
-        string& getName(){return name;};     // get the lattice name
+        void print();                        // print out all bonds 
 
+        pair<int,int> getSites(int index);          // get sites associated with a bond
+        float         getStrength(int index);       // get bond's strength
+        int           getBondsN(){ return Nbonds;}; // get the number of bonds
+        string&       getName(){return name;};      // get the lattice name
+
+        int getWidth(){      return x;};
+        int getHeight(){     return y;};
+        int getUnitWidth(){  return unitx;};
+        int getUnitHeight(){ return unity;};
     protected:
         string name;          // lattice-type name
         
         vector<tBond> bonds;  // vector of bonds
         int Nbonds;           // number of bonds
+
+        int x;      // width
+        int y;      // height
+        int unitx;  // unit cell width
+        int unity;  // unit cell height
 };
 
 
 
 /******************************************************************************
- * Rectangular lattice class with periodic and open boundary conditions
+ * Implements nearest neighbors bonds on a PBC or OBC rectangular lattice
  *****************************************************************************/
-class Rectangle: public Lattice
+class Rectangle: public Bonds 
 {
     public:
-        Rectangle(int _x, int _y, bool _OBC, long _seed);
+        Rectangle(int _x, int _y, bool _OBC, float _J);
 };
 
 
 
 /******************************************************************************
- * Chimera lattice class as implemented by Dwave. 
+ * Implements chimera-type bonds as used on D-wave 2. 
  * It assumes that the width of its unit cell is always kept to 2 spins
  *****************************************************************************/
-class Chimera: public Lattice
+class Chimera: public Bonds
 {
     public:
-        Chimera(int _x, int _y, long _seed,  int _unity);
+        Chimera(int _x, int _y, int _unity, float _J);
 };
 
 
-class Hamiltonian
-{
-    public:
-        Hamiltonian(
-}
 #endif

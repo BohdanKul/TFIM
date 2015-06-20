@@ -16,7 +16,7 @@ class tOperator
         int type;  // operator type; can take the following values:
                    // -2 null operator 
                    // -1 off-diagonal, one site
-                   // 0 diagonal, one site
+                   // 0 diagonal (identity), one site
                    // 1 diagonal, two sites
         tOperator(){type = -2; index = -1;};
         tOperator(int _type, int _index): type(_type), index(_index) {};
@@ -26,7 +26,7 @@ class tOperator
 class TFIM: public RandomBase
 {
     public:
-        TFIM(Lattice* const _lattice, long _seed, float _beta, float _h, long _binSize);
+        TFIM(Spins* const _spins, Bonds* const _bonds, vector<float>* _xfield, long _seed, float _beta, long _binSize);
         int  DiagonalMove();       // diagonal operators update
         int  OffDiagonalMove();    // cluster update
         void MapStateBack();       // update of spins and operators list state
@@ -59,8 +59,6 @@ class TFIM: public RandomBase
         void Accumulate(vector<float>& from, vector<float>& to);
 
         // Variables and data structures
-        float h;      // transverse field strength
-        float J;      // Z-Z interaction strength
         long  M;      // operators list length  
         long  n;      // number of non-identity operators
         float beta;   // inverse temperature
@@ -76,7 +74,6 @@ class TFIM: public RandomBase
 
 
         int LegSpin[8][4];  // vertex types to spin states map
-        Lattice& lattice;   // lattice object
         Hamiltonian ham;    // class incapsulating spins state and interactions
         //Spins   ap;       // propagated in imagenary time spins object
 

@@ -2,19 +2,19 @@
 #include <math.h>
 #include <cmath>
 #include "tfim.h"
+#include <algorithm>    // lower_bound
 
-TFIM::TFIM(Lattice* const _lattice, long _seed, float _beta, float _h, long _binSize):
+TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, vector<float>* _xfield,
+           long _seed, float _beta, long _binSize):
     RandomBase(_seed),  // initialize ancestor
-    communicator(_lattice, _beta, _h, _seed), 
-    lattice(*_lattice) // storing a reference, no need to copy 
+    communicator(_bonds, _beta,  _seed), 
+    ham(_spins, _bonds, _xfield) // storing a reference, no need to copy 
     //ap(*_lattice)       // slicing _lattice into its ancestor ap, a copy is created
 {
     // Set up physical variables
     beta   = _beta;
-    h      = _h;
-    J      = 1.0;
-    Nsites = lattice.getSize();
-    Nbonds = lattice.getBondsN();
+    Nsites = ham.spins.getSize();
+    Nbonds = ham.bonds.getBondsN();
 
     // Initialize algorithmic variables
     n = 0;
@@ -64,30 +64,32 @@ TFIM::TFIM(Lattice* const _lattice, long _seed, float _beta, float _h, long _bin
     *communicator.stream("estimator")<< eHeader << endl;    
 
     cout << "---Initialization---" << endl;
-    cout << "   J =  " << J << " h = " << h << endl;
     cout << "   Bonds #: " << Nbonds << endl;
     cout << "   Sites #: " << Nsites << endl;
 
 }
 
 /*****************************************************************************
- * Compute relative probability of diagonal elements insertion required in 
- * the diagonal update.
+ * Compute insertation probability of a diagonal operator in the diagonal update
  *****************************************************************************/
 void TFIM::computeDiagProb()
 {
-  
-    // Attribute probability to each diagonal operator based on its weight
+    // Commulative insertation probability 
     diagProb.clear();
-    float runTotal = 0;
-    float Total    = ham.getEtotal();
-    for (auto elem = ham.bonds.begin(); elem!=ham.bonds.end(); elem++){
-        runTotal += 2.0*abs(elem->getStrength());
+    
+    float runTotal = 0;                // running total 
+    float Total    = ham.getEtotal();  // the total diagonal energy is used as the normalization
+
+    // Start with opertators acting on a bond
+    for (int index = 0; index!=ham.bonds.getBondsN(); index++){
+        runTotal += 2.0*abs(ham.bonds.getStrength(index));
         diagProb.push_back(runTotal/Total);
     }
+    // Compute the total insertation probability of all bond operators
     bDiagProb = runTotal/Total;
 
-    for (auto elem = ham.zfield.begin(); elem!=ham.zfield.end(); elem++){
+    // Continue with operators acting on seperate sites (field)
+    for (auto elem = ham.xfield.begin(); elem!=ham.xfield.end(); elem++){
         runTotal += *elem;
         diagProb.push_back(runTotal/Total);
     }
@@ -100,15 +102,18 @@ void TFIM::computeDiagProb()
 **************************************************************/
 int TFIM::DiagonalMove()
 {
-    long  ibond = -1;     // bond index
     float AccP  =  0;     // acceptance probability
     int   index;          // site or bond index
-    Spins ap = lattice;   // propagated in imagenary time spins state
-    int s0;               // two spin states  
+    Spins ap = ham.spins; // propagated in imagenary time spins state
+    int s0;               // two spins state  
     int s1;
-    pair<int,int> cSites;
+    float bondJ;          // J_{i,j} constant of sigma^z_i x sigmaz^z_j
+    pair<int,int> cSites; // coordinates of a spin pair
+    bool binsert;         // flag indicating the state of an operator insertation 
+
+
     long nlast;
-    bool ldebug = debug; 
+    bool ldebug  = debug;
     // if measuring magnetization per site, reset assisting variables
     if (bMperSite) {
         tMperSite.assign(Nsites,0); 
@@ -118,13 +123,11 @@ int TFIM::DiagonalMove()
     if (ldebug){
         cout << "---Diagonal Update" << endl;
         printOperators();
-        ap.printSpins();
-        lattice.printSpins();
-        lattice.printBonds();
+        ap.print();
+        ham.spins.print();
+        ham.bonds.print();
     }
-    //printIntVector(&lLast,  "Last");
-    //printIntVector(&lFirst, "First");
-    //printIntVector(&lVtx,   "Vertices");
+    
     // Parse through each operator in the list
     for (auto oper=lOper.begin(); oper!=lOper.end(); oper++){
         nlast++;
@@ -134,43 +137,60 @@ int TFIM::DiagonalMove()
             // Compute the probability of inserting a diagonal operator
             AccP = beta*(ham.getEtotal())/(float) (M-n);
             if (uRand()<AccP){
-                
-                // If accepted, we can insert either one or two sites operator
-                AccP = (h*(float)(Nsites))/(h*(float)(Nsites)+2.0*J*(float)(Nbonds));
-                
-                // If it is a one site operator, insert it on a random site
-                if (uRand()<AccP){
-                    index = uRandInt()%Nsites;    
-                    if (ldebug) cout << "   (" << oper->type << "," << oper->index << ") -> (0," << index << ")" << endl;  
-                    oper->set(0,index);
-                    n++;
-                }
-                // Otherwise, insert a two sites operator on a random bond
-                else{
-                    index = uRandInt()%Nbonds; 
-                     
-                     //check whether the local spin configuration is favourable
-                     cSites = lattice.getSites(index);
-                     s0 = ap.getSpin(cSites.first);
-                     s1 = ap.getSpin(cSites.second);
-                     if (s0 + s1 != 0){
-                        if (ldebug) cout << "   (" << oper->type << "," << oper->index << ") -> (1," << index << ")" << endl;  
-                        oper->set(1,index);
+                binsert = false;
+                do{
+                    // Randomly choose the bond to be inserted 
+                    AccP = uRand(); 
+                    index = lower_bound(diagProb.begin(), diagProb.end(), AccP) - diagProb.begin();      
+                    
+                    // For one site operator
+                    if (AccP>bDiagProb){
+                        // Determine the site the bond is acting on
+                        index -= ham.bonds.getBondsN();
+                        
+                        // Insert a new operator
+                        oper->set(0,index);
                         n++;
-                     } 
+                        binsert = true;
+                    }
+                    // For two sites operator
+                    else{
+                         
+                         // Get all the information required for the bond insertion
+                         cSites = ham.bonds.getSites(index);
+                         s0 = ap.getSpin(cSites.first);
+                         s1 = ap.getSpin(cSites.second);
+                         bondJ = ham.bonds.getStrength(index);
+                         
+                         // Insert new operator only if the local spin configuration is favourable.
+                         // For an antiferromagnetic bond, spins need to be anti-alligned
+                         if ((bondJ > 0 ) and (s0 + s1 == 0)){
+                            oper->set(1,index);
+                            n++;
+                            binsert = true;
+                         } 
+                         // For a ferromagnetic bond, spins need to be alligned
+                         else if ((bondJ < 0) and (s0 + s1 != 0)){
+                             oper->set(1,index);
+                             n++;
+                            binsert = true;
+                         }
+                    }
+                } while( !binsert );
+
+                // If there are too many non null operators in the list, 
+                // return an error code
+                if ((float)(M)/(float)(n)<1.25){     
+                  cout << "M/n = " << (float) M/n << " < " << 1.25 << endl;
+                  return 1;   
                 }
-                 // If there are too many non null operators in the list, 
-                 // return an error code
-                 if ((float)(M)/(float)(n)<1.25){     
-                   cout << "M/n = " << (float) M/n << " < " << 1.25 << endl;
-                   return 1;   
-               }
             }
         }
+
         // If it is a diagonal operator, try to remove it
         else if ((oper->type == 0) or (oper->type == 1)){
             // Compute the probability of the removal process
-            AccP = (float)(M-n+1)/(beta*(h*(float)(Nsites)+(2.0*J)*(float)(Nbonds)));
+            AccP = (float)(M-n+1)/(beta*ham.getEtotal());
             if (ldebug)
                 cout << "   (" << oper->type << "," << oper->index << ") -> (-2,-1)" << endl;  
             if (uRand()<AccP){
@@ -181,11 +201,10 @@ int TFIM::DiagonalMove()
         // Otherwise it must be an off-diagonal operator. It is left as it is.
         // However the propagated spins state need to be modified.
         else{
-            ap.flipSiteSpin(oper->index);
+            ap.flip(oper->index);
             if (ldebug){
                 cout << "   offd: " << oper->index << endl;
-                ap.printSpins();
-                lattice.printSpins();
+                ap.print();
             }
            
             // Accumulate magnetization per site measurement 
@@ -232,7 +251,7 @@ void TFIM::Measure()
 
     long temp = 0;
     for (int i=0; i!=Nsites; i++){
-        temp += lattice.getSpin(i);
+        temp += ham.spins.getSpin(i);
     }
     aTM += pow((float)(temp)/(float)(Nsites),2);
     // One sufficient number of measurements are taken, record their average
@@ -241,7 +260,7 @@ void TFIM::Measure()
         // Record operators list length and average energy per site
         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(an/(1.0*binSize)));
 
-        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + J*(float)(Nbonds)/(float)(Nsites) + h;
+        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + ham.getEtotal()/(float)(Nsites);
         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %EperSite);
        //cout << an/(1.0*binSize) << " " << EperSite << " "; 
 
@@ -294,16 +313,16 @@ int TFIM::VertexType(int otype, int index, Spins& ap)
     if (debug){
         cout << endl << "---Vertex Type" << endl;
         //printOperators();
-        ap.printSpins();
-        lattice.printSpins();
-        lattice.printBonds();
+        ap.print();
+        ham.spins.print();
+        ham.bonds.print();
         cout << "   type: " << otype << "   index: " << index << endl << endl;
     }
     // If it is a two sites operator
     if (otype == 1){
         
         // Determine the spins state
-        cSites = lattice.getSites(index);
+        cSites = ham.bonds.getSites(index);
         s0 = ap.getSpin(cSites.first);
         s1 = ap.getSpin(cSites.second);
         
@@ -405,7 +424,7 @@ void TFIM::ConstructLinks()
     //Reinitiate necessary data structures    
     long p=-1;            // index of current non null operator            
     int   index;          // site or bond index
-    Spins ap = lattice;   // propagated in imagenary time spins state
+    Spins ap = ham.spins; // propagated in imagenary time spins state
     pair<int,int> cSites; // coordinates of 2 spins
     int cSite;            // coordinates of 1 spin    
     int nbSites;          // number of sites in a bond (2 or 1)
@@ -418,8 +437,8 @@ void TFIM::ConstructLinks()
 
     if (ldebug){
         cout << "---Construct links " << endl;
-        ap.printSpins();
-        lattice.printSpins();
+        ap.print();
+        ham.bonds.print();
         printOperators();
     }
     // Start linked list construction
@@ -432,7 +451,7 @@ void TFIM::ConstructLinks()
             
             // Check wether it is a one or two sites bond
             if (oper->type == 1){
-                cSites = lattice.getSites(index);
+                cSites = ham.bonds.getSites(index);
                 nbSites = 2;
                 //cout << "Site A: " << cSites.first << " Site B: " << cSites.second << endl;
             }
@@ -466,14 +485,14 @@ void TFIM::ConstructLinks()
             
             // Propagate the spins state if it is an off-diagonal operator
             if  (oper->type == -1){
-                ap.flipSiteSpin(index);                        
+                ap.flip(index);                        
             }
             
         }
 
     }
     //Construct links across the periodic boundary in the p-expansion
-    for (int lspin=0; lspin!=lattice.getSize(); lspin++){
+    for (int lspin=0; lspin!=ham.spins.getSize(); lspin++){
         if (lLast[lspin] != -1){
             lLinks[lLast[lspin]]  = lFirst[lspin];
             lLinks[lFirst[lspin]] = lLast[lspin];
@@ -486,8 +505,8 @@ void TFIM::ConstructLinks()
 
     if (ldebug){
         cout << endl << "   Construct links. " << endl;
-        ap.printSpins();
-        lattice.printSpins();
+        ap.print();
+        ham.bonds.print();
     }
     //cout << "    Construct links. " << endl;
 }
@@ -510,18 +529,18 @@ void TFIM::MapStateBack()
     }
     //cout << "    Map spins state back " << endl;
     // Map back the spins state     
-    for (long i=0; i!=lattice.getSize(); i++){
+    for (long i=0; i!=ham.spins.getSize(); i++){
         // Try to flip the spin if it is not acted by an operator 
         if  (lFirst[i]==-1){
             if (uRand()<0.5)
-                lattice.flipSiteSpin(i);
+                ham.spins.flip(i);
         }                                    
         else{        
             // Get the coordinates of the first leg over this site            
             p   = (long) lFirst[i]/4; 
             leg = lFirst[i]%4;
             //cout << "Spin " << i << " Bond: " << p << " leg: " << leg << " vtx: " << lVtx[p] << " leg spin: " << LegSpin[lVtx[p]-1][leg] << endl;
-            lattice.setSpin(i, LegSpin[lVtx[p]-1][leg]);
+            ham.spins.setSpin(i, LegSpin[lVtx[p]-1][leg]);
         }
     }
     //cout << "    Map spins state back. " << endl;

@@ -5,14 +5,14 @@
 #include <unordered_map>
 #include <boost/format.hpp>
 #include <boost/filesystem.hpp>
-#include "lattice.h"
+#include "bond.h"
 
 using namespace std;
 
 class Communicator
 {
     public:
-        Communicator(Lattice * const lattice, float _beta, float _h, long _p);
+        Communicator(Bonds * const _bonds, float _beta, long _p);
         fstream* stream(string _fileName); 
         long     getId(){return id;};
 

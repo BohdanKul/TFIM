@@ -1,106 +1,37 @@
-#include "lattice.h"
-
-/*****************************************************************************
- * Basis lattice constructor
- *****************************************************************************/
-Spins::Spins(int _Nspins)
-/*
-    _Nspins sets the size of spins vectors
-*/
-{
-    // Initialize varialbes
-    Nspins = _Nspins;
-    spins.resize(Nspins,1);
-}
-
-/*****************************************************************************
- * Basis lattice constructor - initializes spins in a random state
- *****************************************************************************/
-Spins::Spins(int _Nspins, long _seed):
-    Spins(_Nspins)
-/*
-    _Nspins - sets the size of spins vectors
-    _seed   - initializes the random number generator necessary 
-              to generate a random distribution of spins
-*/
-{
-    RandomBase  rand(_seed);     // random numbers generator
-    
-    // Initialize spins randomly with values 1 and -1
-    for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
-        *spin = pow(-1,rand.uRandInt()%2);                         
-    }
-}
-
-/*****************************************************************************
- * Returns the spin state 
- *****************************************************************************/
-int Spins::getSpin(int index)
-/*
-   index - index of the element to be flipped  
-*/
-{
-    return spins[index];
-}
-
-/*****************************************************************************
- * Sets the spin state to a particular value
- *****************************************************************************/
-void Spins::setSpin(int index, int val)
-/*
-   index - index of the element to be flipped  
-   val   - the new value of the spin state
-*/
-{
-    spins[index] = val;
-}
-
-/*****************************************************************************
- * Flips a spin
- *****************************************************************************/
-void Spins::flipSiteSpin(int index)
-/*
-   index - index of the element to be flipped  
-*/
-{
-    setSpin(index, -1*getSpin(index));
-}
-
-/*****************************************************************************
- * Print out the spins state 
- *****************************************************************************/
-void Spins::printSpins()
-{
-    cout << "   Spins state: " << endl;
-    for (int i=0; i!=Nspins; i++)
-        cout << getSpin(i) << " ";
-    cout << endl;
-}
-
-//*****************************************************************************
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//----------------------------------------------------------------------------
-//*****************************************************************************
+#include "bond.h"
 
 
 /*****************************************************************************
  * Add a new bond 
  *****************************************************************************/
-void Lattice::setBond(int siteA, int siteB)
+void Bonds::setBond(int _siteA, int _siteB)
 /*
     siteA, siteB - coordinates of spins belonging to the newly defined bond  
 */
 {
     tBond tbond; 
-    bonds.push_back(tbond.set(siteA,siteB)); 
+    bonds.push_back(tbond.set(_siteA,_siteB)); 
     Nbonds++;
 }
 
 /*****************************************************************************
+ * Add a new bond with arbitrary strength value
+ *****************************************************************************/
+void Bonds::setBond(int _siteA, int _siteB, float _strength)
+/*
+    siteA, siteB - coordinates of spins belonging to the newly defined bond  
+*/
+{
+    tBond tbond; 
+    bonds.push_back(tbond.set(_siteA, _siteB, _strength)); 
+    Nbonds++;
+}
+
+
+/*****************************************************************************
  * Return coordinates of spins associated with a bond 
  *****************************************************************************/
-pair<int,int> Lattice::getSites(int index)
+pair<int,int> Bonds::getSites(int index)
 /*
     index - index of the bond 
 */
@@ -109,14 +40,26 @@ pair<int,int> Lattice::getSites(int index)
 }
 
 
+/*****************************************************************************
+ * Return bond's strength 
+ *****************************************************************************/
+float Bonds::getStrength(int index)
+/*
+    index - index of the bond 
+*/
+{
+    return bonds[index].getStrength(); 
+}
+
+
 
 /*****************************************************************************
  * Print out the list of bonds
  *****************************************************************************/
-void Lattice::printBonds()
+void Bonds::print()
 {
     
-    cout << "   Lattice bonds: " ;
+    cout << "   Bonds: " ;
     for (int i=0; i!=Nbonds; i++){
          bonds[i].print();
          cout << " ";
@@ -137,9 +80,8 @@ void Lattice::printBonds()
  * Rectangle constructor - builds a rectangular lattice with PBC or OBC with
  * bonds only between nearest neighbours. 
  *****************************************************************************/
-Rectangle::Rectangle(int _x, int _y, bool _OBC = false, long _seed = 0):
-    Lattice(_x,_y,1,1, _seed) // Initialize the parent lattice class
-                              // with a unit cell containing only 1 spin.
+Rectangle::Rectangle(int _x, int _y, bool _OBC, float _J):
+    Bonds() // Initialize the parent lattice class
 /*
     x   - lattice width. 
     y   - lattice height. Caution: if a one-dimensional chain is required, 
@@ -147,8 +89,10 @@ Rectangle::Rectangle(int _x, int _y, bool _OBC = false, long _seed = 0):
    _OBC - controls boundary conditions. Set to false for PBC and to true for OBC. 
 */
 {
-    // Set up the lattice type name
+    // Set up the lattice type name and initialize its geometry
     name  = "rectangle";
+    x = _x;
+    y = _y;
     
     // Define assisting variables used in the loop below
     int siteA;  // coordinates of two spins
@@ -162,7 +106,7 @@ Rectangle::Rectangle(int _x, int _y, bool _OBC = false, long _seed = 0):
             siteA = i;
             siteB = (i+1)%x; // integer arithmetic is required 
                              // to properly treat boundary bonds
-            setBond(siteA,siteB);
+            setBond(siteA, siteB, _J);
         }
     }
     else{
@@ -173,13 +117,13 @@ Rectangle::Rectangle(int _x, int _y, bool _OBC = false, long _seed = 0):
                 siteA = i*x+j;
                 siteB = i*x+(j+1)%x; // integer arithmetic is required 
                                      // to properly treat boundary bonds
-                setBond(siteA,siteB);
+                setBond(siteA, siteB, _J);
                 
                 // set up a vertical bond
                 siteA = i*x+j;
                 siteB = ((i+1)%y)*x + j; // integer arithmetic is required 
                                          // to properly treat boundary bonds
-                setBond(siteA,siteB);
+                setBond(siteA, siteB, _J);
             }
         }
     }
@@ -213,11 +157,15 @@ Rectangle::Rectangle(int _x, int _y, bool _OBC = false, long _seed = 0):
  *  8 10   12 14 
  *  9 11   13 15
  *****************************************************************************/
-Chimera::Chimera(int _x, int _y, long _seed = 0, int _unity = 4):
-    Lattice(_x, _y, 2, _unity, _seed) 
+Chimera::Chimera(int _x, int _y, int _unity, float _J):
+    Bonds() 
 {
-    // Name the lattice type
+    // Name the lattice type and initialize its geometry
     name  = "chimera";
+    x     = _x;
+    y     = _y;
+    unitx = 2;
+    unity = _unity;
 
     // Define assisting variables used in the loop below
     int LTspin = 0;  // coordinates of unit cell's left, top-most site
@@ -237,7 +185,7 @@ Chimera::Chimera(int _x, int _y, long _seed = 0, int _unity = 4):
                 siteA = LTspin + k;
                 for (int l=0; l!=unity; l++){
                     siteB = LTspin + unity + l;
-                    setBond(siteA,siteB);
+                    setBond(siteA, siteB, _J);
                 }
             }
             // Add vertical cross-cell bonds from the current unit cell
@@ -245,7 +193,7 @@ Chimera::Chimera(int _x, int _y, long _seed = 0, int _unity = 4):
                 for (int k=0; k!=unity; k++){
                     siteA = LTspin + k;
                     siteB = LTspin + k + 2*unity*x; 
-                    setBond(siteA,siteB);
+                    setBond(siteA, siteB, _J);
                 }
             }
             // Add horizontal cross-cell bonds from the current unit cell
@@ -253,7 +201,7 @@ Chimera::Chimera(int _x, int _y, long _seed = 0, int _unity = 4):
                 for (int k=0; k!= unity; k++){
                     siteA = LTspin + unity + k;
                     siteB = LTspin + unity + k + 2*unity;
-                    setBond(siteA,siteB);
+                    setBond(siteA, siteB, _J);
                 }
             }
 

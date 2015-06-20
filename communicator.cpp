@@ -6,18 +6,18 @@
 using namespace std;
 //using boost::lexical_cast;
 
-Communicator::Communicator(Lattice * const lattice, float _beta, float _h, long _p)
+Communicator::Communicator(Bonds* const _bonds, float _beta, long _p)
 {
     p = _p;
      
     // Determine the filename 
-    if (lattice->getName()=="chimera")
-       dataName = boost::str(boost::format("01-%03d-%03d-b%06.3f-h%06.3f-x%02d-y%02d") 
-                      %lattice->getWidth() %lattice->getHeight() %_beta%_h%lattice->getUnitWidth()%lattice->getUnitHeight());
+    if (_bonds->getName()=="chimera")
+       dataName = boost::str(boost::format("01-%03d-%03d-b%06.3f-x%02d-y%02d") 
+                      %_bonds->getWidth() %_bonds->getHeight() %_beta%_bonds->getUnitWidth()%_bonds->getUnitHeight());
     
-    if (lattice->getName()=="rectangle")
-       dataName = boost::str(boost::format("01-%03d-%03d-b%06.3f-h%06.3f") 
-                      %lattice->getWidth() %lattice->getHeight() %_beta%_h);
+    if (_bonds->getName()=="rectangle")
+       dataName = boost::str(boost::format("01-%03d-%03d-b%06.3f") 
+                      %_bonds->getWidth() %_bonds->getHeight() %_beta);
     
 
     //Add the seed value to the filename
