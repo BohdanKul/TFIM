@@ -93,6 +93,14 @@ void TFIM::computeDiagProb()
         runTotal += *elem;
         diagProb.push_back(runTotal/Total);
     }
+    
+    cout << "---Diagonal probabilities---" << endl;
+    cout << "   Total bond probability: " << bDiagProb << endl << "   ";
+    for (auto dp=diagProb.begin(); dp!=diagProb.end(); dp++){
+        cout << *dp << " ";
+    }
+    cout << endl << endl;
+
 }
  
 
@@ -114,6 +122,7 @@ int TFIM::DiagonalMove()
 
     long nlast;
     bool ldebug  = debug;
+    //bool ldebug  = true;
     // if measuring magnetization per site, reset assisting variables
     if (bMperSite) {
         tMperSite.assign(Nsites,0); 
@@ -125,7 +134,7 @@ int TFIM::DiagonalMove()
         printOperators();
         ap.print();
         ham.spins.print();
-        ham.bonds.print();
+        //ham.bonds.print();
     }
     
     // Parse through each operator in the list
@@ -137,12 +146,13 @@ int TFIM::DiagonalMove()
             // Compute the probability of inserting a diagonal operator
             AccP = beta*(ham.getEtotal())/(float) (M-n);
             if (uRand()<AccP){
+                if (ldebug) cout << "   (" << oper->type << "," << oper->index << ")";  
                 binsert = false;
-                do{
+                //do{
                     // Randomly choose the bond to be inserted 
                     AccP = uRand(); 
                     index = lower_bound(diagProb.begin(), diagProb.end(), AccP) - diagProb.begin();      
-                    
+                    //cout << endl << "   P = " << AccP << " index = " << index << endl; 
                     // For one site operator
                     if (AccP>bDiagProb){
                         // Determine the site the bond is acting on
@@ -152,6 +162,7 @@ int TFIM::DiagonalMove()
                         oper->set(0,index);
                         n++;
                         binsert = true;
+                        if (ldebug) cout <<" -> ("<<oper->type<< ","<<oper->index<<")";
                     }
                     // For two sites operator
                     else{
@@ -175,8 +186,10 @@ int TFIM::DiagonalMove()
                              n++;
                             binsert = true;
                          }
+                        if (ldebug) cout <<"-> ("<<oper->type<< ","<<oper->index<<")";
                     }
-                } while( !binsert );
+                //} while( !binsert );
+                if (ldebug) cout << endl;
 
                 // If there are too many non null operators in the list, 
                 // return an error code
@@ -260,7 +273,7 @@ void TFIM::Measure()
         // Record operators list length and average energy per site
         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(an/(1.0*binSize)));
 
-        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + ham.getEtotal()/(float)(Nsites);
+        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + ham.getEoffset()/(float)(Nsites);
         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %EperSite);
        //cout << an/(1.0*binSize) << " " << EperSite << " "; 
 
@@ -315,7 +328,7 @@ int TFIM::VertexType(int otype, int index, Spins& ap)
         //printOperators();
         ap.print();
         ham.spins.print();
-        ham.bonds.print();
+        //ham.bonds.print();
         cout << "   type: " << otype << "   index: " << index << endl << endl;
     }
     // If it is a two sites operator
@@ -332,13 +345,13 @@ int TFIM::VertexType(int otype, int index, Spins& ap)
         if  ((s0 == 1) and (s1 == 1))
             return 2;
         if  ((s0 == 1) and (s1 ==-1)){
-            cout << " Vertex type: impossible configuration " << endl;
-            exit(0);
+            //cout << " Vertex type: impossible configuration " << endl;
+            //exit(0);
             return 3;
         }
         if  ((s0 == -1) and (s1 == 1)){
-            cout << " Vertex type: impossible configuration " << endl;
-            exit(0);
+            //cout << " Vertex type: impossible configuration " << endl;
+            //exit(0);
             return 4;
         }
     }
@@ -438,7 +451,7 @@ void TFIM::ConstructLinks()
     if (ldebug){
         cout << "---Construct links " << endl;
         ap.print();
-        ham.bonds.print();
+        //ham.bonds.print();
         printOperators();
     }
     // Start linked list construction
@@ -506,7 +519,7 @@ void TFIM::ConstructLinks()
     if (ldebug){
         cout << endl << "   Construct links. " << endl;
         ap.print();
-        ham.bonds.print();
+        //ham.bonds.print();
     }
     //cout << "    Construct links. " << endl;
 }

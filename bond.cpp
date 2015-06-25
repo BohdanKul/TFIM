@@ -59,11 +59,13 @@ float Bonds::getStrength(int index)
 void Bonds::print()
 {
     
-    cout << "   Bonds: " ;
+    cout << "---Bonds--- "  << endl;
+    cout << "   Lattice: " << getName() << endl;
     for (int i=0; i!=Nbonds; i++){
+         cout << "   ";
          bonds[i].print();
-         cout << " ";
     }
+    cout << endl;
     cout << endl;
 }
 
@@ -127,6 +129,7 @@ Rectangle::Rectangle(int _x, int _y, bool _OBC, float _J):
             }
         }
     }
+    print();
 }
 
 //*****************************************************************************
@@ -207,5 +210,6 @@ Chimera::Chimera(int _x, int _y, int _unity, float _J):
 
         }
     }
+    print();
 }
 

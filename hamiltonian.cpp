@@ -9,6 +9,13 @@
 Hamiltonian::Hamiltonian(Spins* _spins, Bonds* _bonds, vector<float>* _xfield):
 spins(*_spins), bonds(*_bonds), xfield(*_xfield)
 {
+    cout << "---Hamiltonian initialization---" << endl;
+    cout << "   Transverse field:" << endl << "   ";
+    for (auto xf=xfield.begin(); xf!=xfield.end(); xf++){
+        cout << *xf << " ";
+    }
+    cout << endl;
+
     // Compute the energy off-set due to diagonal operators
     tEoffset = 0;
     for (int index = 0; index!=bonds.getBondsN(); index++)
@@ -19,6 +26,10 @@ spins(*_spins), bonds(*_bonds), xfield(*_xfield)
         tEoffset += *elem;
 
     tE = tEoffset + bEoffset;
+    cout << "   Bond offset: "           << getBondEoffset() << endl 
+         << "   Total offset: "          << getEoffset()     << endl
+         << "   Total diagonal energy: " << getEtotal()      << endl;
+    cout << endl;
 }
 
 /*****************************************************************************

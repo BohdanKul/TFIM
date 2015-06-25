@@ -163,6 +163,8 @@ int main(int argc, char *argv[])
     vector<float> xfield; 
     // If interactions are specified in a file, read them off
     if (params.count("inter")){
+        
+        bonds = new Bonds();
         cout << "Loading interaction values from: " << params["inter"].as<string>() << endl;
     
         fstream fInter (params["inter"].as<string>(), ios_base::in);
@@ -243,31 +245,31 @@ int main(int argc, char *argv[])
     }
 
 
-
     // ------------------------------------------------------------------------ 
     // Initialize Monte Carlo class 
     // ------------------------------------------------------------------------ 
     TFIM tfim(spins, bonds, &xfield, params["process_id"].as<long>(), beta, params["binsize"].as<long>());
-    
+    cout << " hm " << endl; 
     // ------------------------------------------------------------------------ 
     // Run pre-equilibration only if starting from scratch
     // ------------------------------------------------------------------------ 
-    if  (params["state"].as<string>() == ""){
-        cout << endl << "Equilibration stage" << endl << endl;
-        int NoAdjust;
-        NoAdjust=0;
-        for (int i=0; i!=params["binsize"].as<long>()*params["equil"].as<long>(); i++){
-        
-            // Perform  a full MC sweep
-            if (tfim.DiagonalMove()==1) tfim.AdjustM();  // diagonal update
-            tfim.ConstructLinks();                       // linked list and vertex list construction 
-            tfim.OffDiagonalMove();                      // cluster update
-            tfim.MapStateBack();                         // mapping back the updated state 
-        }
-    }
-    else{ 
-        cout << "No pre-equilibration. Loading from: " << params["state"].as<string>() << endl;
-    }
+    //if  (params.count("state")){
+    //    cout << endl << "Equilibration stage" << endl << endl;
+    //    int NoAdjust;
+    //    NoAdjust=0;
+    //    for (int i=0; i!=params["binsize"].as<long>()*params["equil"].as<long>(); i++){
+    //    
+    //        // Perform  a full MC sweep
+    //        if (tfim.DiagonalMove()==1) tfim.AdjustM();  // diagonal update
+    //        tfim.ConstructLinks();                       // linked list and vertex list construction 
+    //        tfim.OffDiagonalMove();                      // cluster update
+    //        tfim.MapStateBack();                         // mapping back the updated state 
+    //    }
+    //}
+    //else{ 
+    //    cout << "No pre-equilibration. Loading from: " << params["state"].as<string>() << endl;
+    //}
+    cout << " hmmmm " << endl; 
         
     // ------------------------------------------------------------------------ 
     // Run the main loop 
