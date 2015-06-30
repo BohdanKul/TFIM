@@ -34,7 +34,8 @@ class TFIM: public RandomBase
         void ConstructLinks();     // construction of links required for the 
                                    // off-diagonal update
         void AdjustM();            // adjust the operator list length 
-        void Measure();            // accumulate estimator measurements 
+        void Measure();            // accumulate estimator measurements
+        void Measure(int sampleInd, double* aEnergy, double* aMagnetization); // accumulate estimator measurements and populate output arrays
 
     private:
         void resetMeas();         // reset measurement variables to default values

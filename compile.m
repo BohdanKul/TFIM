@@ -1,0 +1,1 @@
+mex -v LDFLAGS='-shared -Wl,--version-script,/usr/local/MATLAB/R2013a/extern/lib/glnxa64/mexFunction.map' CXXFLAGS='$CXXFLAGS -fPIC -o3 -std=c++0x -o qmc_matlab.o'  CXXLIBS='$CXXLIBS  tfim.o randombase.o communicator.o hamiltonian.o bond.o spin.o -lpthread -lboost_program_options -lboost_filesystem -lboost_system' qmc_matlab.cpp
