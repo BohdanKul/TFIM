@@ -297,6 +297,31 @@ void TFIM::Measure()
     }
 }
 
+/******************************************************************************
+* Accumulate estimator measurements
+******************************************************************************/
+void TFIM::Measure(int sampleInd, double* aEnergy, double* aMagnetization)
+{
+    nMeas += 1;
+    Accumulate(n, an);
+
+    long temp = 0;
+    for (int i = 0; i != Nsites; i++) {
+        temp += ham.spins.getSpin(i);
+    }
+    aTM += pow((float)(temp) / (float)(Nsites), 2);
+    // One sufficient number of measurements are taken, record their average
+    if (nMeas == binSize) {
+        float EperSite = -(float)(an) / (float)(binSize * Nsites) / beta + ham.getEoffset() / (float)(Nsites);
+        aEnergy[sampleInd] = EperSite;
+
+        // Record the total magnetization
+        if (bM)
+            aMagnetization[sampleInd] = aTM / (1.0 * binSize);
+        
+        resetMeas();
+    }
+}
 
 /**************************************************************
 * Reset measurement variables  

@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-c -o3 -std=c++0x
+CFLAGS=-c -o3 -std=c++0x -fPIC
 LDFLAGS=-L. -lboost_program_options -lboost_filesystem -lboost_system
 SOURCES=main.cpp tfim.cpp randombase.cpp communicator.cpp hamiltonian.cpp bond.cpp spin.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
