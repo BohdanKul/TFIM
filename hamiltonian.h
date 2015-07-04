@@ -9,7 +9,7 @@ using namespace std;
 class Hamiltonian
 {
     public:
-        Hamiltonian(Spins* _spins, Bonds* _bonds, vector<float>* _xfield);
+        Hamiltonian(Spins* _spins, Bonds* _bonds, vector<float>* _xfield, vector<float>* _zfield);
         pair<int,int> getSpins(int index);   // get spins associated with a bond
         void flipBondSpins(int index);       // flip spins belonging to a bond
         void computeDiagProb();
@@ -22,6 +22,7 @@ class Hamiltonian
         float getBondEoffset(){ return bEoffset;};
         float getEtotal(){      return tE; } 
     private:
+        float DiagonalBondOffset(const float& J12, const float& h1, const float& h2);
         float tEoffset; // energy off-set due to all diagonal operators
         float bEoffset; // energy off-set due to bond diagonal operators only
         float tE;       // total diagonal energy

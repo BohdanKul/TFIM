@@ -28,6 +28,10 @@ class tBond
             { A = x; B = y; strength = s; return *this;};
         pair<int,int> get()                // get the indices of bond's spins 
             {return pair<int,int>(A,B);};
+        int getSiteA()                 // get the index bond's first spin 
+            {return A};
+        int getSiteB()                 // get the index bond's second spin 
+            {return B};
         float  getStrength()               // get bond's strength
             {return strength;}; 
         void print()                       // print the bond
@@ -59,6 +63,8 @@ class Bonds
 
         pair<int,int> getSites(int index);          // get sites associated with a bond
         float         getStrength(int index);       // get bond's strength
+        tBond*        getBond(int index)
+                      { return &(bonds[index]) }
         int           getBondsN(){ return Nbonds;}; // get the number of bonds
         string&       getName(){return name;};      // get the lattice name
 

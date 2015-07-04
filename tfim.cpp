@@ -3,6 +3,8 @@
 #include <cmath>
 #include "tfim.h"
 #include <algorithm>    // lower_bound
+#include "vertex.cpp"
+
 
 TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, vector<float>* _xfield,
            long _seed, float _beta, long _binSize):
@@ -15,6 +17,29 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, vector<float>* _xfield,
     beta   = _beta;
     Nsites = ham.spins.getSize();
     Nbonds = ham.bonds.getBondsN();
+
+    float J12;
+    float h1; float h2;
+    float d1; float d2; 
+    array<array<float, 16>, Nbonds> VWeights;         // vertex weigths for each bond
+    array<array<float,  4>, Nbonds> diagVWeights;     // weigths of only diagonal vertices for each bond
+    float  diagOffset;      // constant added to make all diagonal weigths non-negative
+    array<array<array<float,8>, 16*4>, Nbonds> VProb; // probability of exiting at a vertex leg
+                                                      // given the entrance leg and vertex type;
+                                                      // used in the off-diagonal update
+    tDiagOffset = 0;
+    for (auto i=0; i!=Nbonds; i++){
+        J12 = _bonds->getBond(i)->getStrength();
+        h1  = _zfield->at(_bonds->getBond(i)->getSiteA());
+        h2  = _zfield->at(_bonds->getBond(i)->getSiteB());
+        d1  = _xfield->at(_bonds->getBond(i)->getSiteA());
+        d2  = _xfield->at(_bonds->getBond(i)->getSiteB());
+        getVertices(J12, h1, h2, d1, d2, diagOffset, VWeights[i], diagVWeights[i]);
+        tDiagOffset += diagOffset;
+        for (auto vtype=0; vtype!=16; vtype++)
+            for (auto enleg=0; enleg!=4, enleg++)
+                getSwitchLegP(enleg, vtype, VWeights[i], VProb[i][vtype*4+enleg])
+    }
 
     // Initialize algorithmic variables
     n = 0;
@@ -273,7 +298,7 @@ void TFIM::Measure()
         // Record operators list length and average energy per site
         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(an/(1.0*binSize)));
 
-        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + ham.getEoffset()/(float)(Nsites);
+        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + tDiagOffset/(float)(Nsites);
         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %EperSite);
        //cout << an/(1.0*binSize) << " " << EperSite << " "; 
 
