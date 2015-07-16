@@ -181,24 +181,26 @@ int getSwitchLegP(const int& enleg, int vtype, array<float, 16>& VWeights, array
     // If possible, adopt the bounce-free solution B1 
     array<float, 8> tprob;
     int solType = -1;
-    if (!(SortedWs[1]+SortedWs[2]+SortedWs[3]< SortedWs[0])) {
-        if (sdebug) cout << "     no bounce solution B1: " << SortedWs[1]+SortedWs[2]+SortedWs[3] << ">" << SortedWs[0] << endl; 
-        tprob = noBounceSolutionB(SortedWs, enLegSort);
-        solType = 0;
-    }
-    // Otherwise, adopt one of the two possible bounce solutions
-    else{
-        if (2*SortedWs[0] > totalW){
-            if (sdebug) cout << "     bounce solution: " << SortedWs[0] << ">" << totalW - SortedWs[0] << endl; 
-            tprob = BounceSolution(SortedWs, enLegSort);
-            solType = 1;
-        }
-        else{
-            if (sdebug) cout << "     heat-bath solution" << endl; 
-            tprob = HeatBathSolution(SortedWs, enLegSort);
-            solType = 2;
-        } 
-    } 
+    //if (!(SortedWs[1]+SortedWs[2]+SortedWs[3]< SortedWs[0])) {
+    //    if (sdebug) cout << "     no bounce solution B1: " << SortedWs[1]+SortedWs[2]+SortedWs[3] << ">" << SortedWs[0] << endl; 
+    //    tprob = noBounceSolutionB(SortedWs, enLegSort);
+    //    solType = 0;
+    //}
+    //// Otherwise, adopt one of the two possible bounce solutions
+    //else{
+    //    if (2*SortedWs[0] > totalW){
+    //        if (sdebug) cout << "     bounce solution: " << SortedWs[0] << ">" << totalW - SortedWs[0] << endl; 
+    //        tprob = BounceSolution(SortedWs, enLegSort);
+    //        solType = 1;
+    //    }
+    //    else{
+    //        if (sdebug) cout << "     heat-bath solution" << endl; 
+    //        tprob = HeatBathSolution(SortedWs, enLegSort);
+    //        solType = 2;
+    //    } 
+    //} 
+    tprob = HeatBathSolution(SortedWs, enLegSort);
+    solType = 2;
  
     // Convert weights to probabilities
     for (int i=0; i!=8; i++)

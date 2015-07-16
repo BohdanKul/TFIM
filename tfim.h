@@ -90,6 +90,7 @@ class TFIM: public RandomBase
         long  nFlippedLegs;      // number of flipped legs in the off-diagonal update
         long  nBounces;          // number of bounces in the off-diagonal update
         long  nLoops;
+        float totalWeight;
 
         // Flags to measure a particular estimator
         bool bMperSite; 

@@ -54,7 +54,7 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
         d1  = _xfield->at(siteA)/(1.0*nA);
         d2  = _xfield->at(siteB)/(1.0*nB);
 
-        cout << "   J: " << J12 << "; h: (" << h1 << ", " << h2 << "); d: (" << d1 << ", " << d2 << "); Z: (" << nA << ", " << nB <<")" << endl;
+        cout << "   A: " << siteA << " B: " << siteB << " J: " << J12 << "; h: (" << h1 << ", " << h2 << "); d: (" << d1 << ", " << d2 << "); Z: (" << nA << ", " << nB <<")" << endl;
 
         // Redefine diagonal operators by flipping their sign
         J12 = -J12;
@@ -117,7 +117,7 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
     lLast.resize(Nspins,-1);
     binSize = _binSize;
     ID = communicator.getId();
-    nLoops = 1;
+    nLoops = max(1, (int) M/10);
 
     // Set up measurement variables
     bMperSite = false;
@@ -167,7 +167,7 @@ void TFIM::computeDiagProb()
     diagProb.clear();
 
     // Compute the normalization
-    float totalWeight = 0.0;
+    totalWeight = 0.0;
     for (auto b=0; b!=Nbonds; b++)
         for (auto i=0; i!=4; i++)
             totalWeight += dWeights[b][i];
@@ -183,7 +183,7 @@ void TFIM::computeDiagProb()
     
     cout << endl << "=== Diagonal insertion probabilities ===" << endl << "   ";
     for (auto dp=diagProb.begin(); dp!=diagProb.end(); dp++)
-        printf("%3.2f; ", *dp);
+        printf("%4.3f; ", *dp);
     cout << endl << endl;
 
 }
@@ -243,10 +243,11 @@ int TFIM::DiagonalMove()
         // If it is a null operator, try to insert a diagonal one
         if (oper->type == 2){
             // Compute the probability of inserting a diagonal operator
-            if (uRand() < (beta*SliceWeight/(float) (M-n)) ){
+            //if (uRand() < (beta*SliceWeight/(float) (M-n)) ){
+            if (uRand() < (beta*totalWeight/(float) (M-n)) ){
                 // Repeat until a compatible vertex is selected 
                 binsert = false;
-                do{
+                //do{
                     // Randomly choose bond and type of the vertex to be inserted 
                     index = lower_bound(diagProb.begin(), diagProb.end(), uRand()) - diagProb.begin();
                     ibond = (int) index / 4; 
@@ -262,7 +263,7 @@ int TFIM::DiagonalMove()
                        n++;
                        binsert = true;
                     }
-                } while( !binsert );
+                //} while( !binsert );
 
                 // If there are too many non null operators in the list, return an error code
                 if ((float)(M)/(float)(n)<1.25){     
@@ -274,7 +275,8 @@ int TFIM::DiagonalMove()
         // If it is a diagonal operator, try to remove it
         else if (oper->type == 1) {
             // Compute the probability of the removal process
-            if (uRand() < ( (float)(M-n+1)/(beta*SliceWeight) )){
+            //if (uRand() < ( (float)(M-n+1)/(beta*SliceWeight) )){
+            if (uRand() < ( (float)(M-n+1)/(beta*totalWeight) )){
                 oper->set(2);
                 n--;
             }
@@ -329,14 +331,14 @@ bool TFIM::AdjustLoopsN()
         ConstructLinks();         // linked list and vertex list construction 
         OffDiagonalMove();        // loop update
         MapStateBack();           // mapping back the updated state 
-        visitedFrac += (1.0*nFlippedLegs)/(2*M);
+        visitedFrac += (1.0*nFlippedLegs)/(0.5*M);
         nFlippedLegs = 0;
     }
 
     if (visitedFrac/(binSize*1.0) > 1.0) return false;
     else{
-        nLoops += 1;
-        cout << ID << ": Flipped fraction=" << setw(1) << setprecision(2) << setfill('0') << visitedFrac/(binSize*1.0) << " 2xM=" << 2.0*M ;
+        nLoops += max((int) M/20, 1);
+        cout << ID << ": Flipped fraction=" << setw(1) << setprecision(2) << setfill('0') << visitedFrac/(binSize*1.0) << " 0.5xM=" << 0.5*M ;
         cout << " Increasing loops # " << nLoops << endl;
         return true;
     }
@@ -607,6 +609,10 @@ int TFIM::OffDiagonalMove()
                 cout << SwitchLegP->at(i)<< " ";
             cout << endl;
         }
+        if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
+           cout << endl << "ERROR: non-allowed vertex is encountered" << endl;
+           exit(0);
+        }
 
         // Unless the new leg is unchanged, keep building the loop
         while (exleg<4){
@@ -625,12 +631,12 @@ int TFIM::OffDiagonalMove()
 
             // Modify the vertex id
             lVtx[p] = FlipVertex(lVtx[p], enleg, exleg);
+            if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
+               cout << endl << "ERROR: non-allowed vertex is encountered" << endl;
+               exit(0);
+            }
             if (ldebug){
                 cout << lVtx[p] << endl << "      RN=" << accP << " Switch P: ";
-                if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
-                   cout << endl << "ERROR: non-allowed vertex is encountered" << endl;
-                   exit(0);
-                }
                 for (int i=0; i!=8; i++)
                     cout << SwitchLegP->at(i)<< " ";
                 cout << endl;
