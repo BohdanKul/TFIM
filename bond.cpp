@@ -29,6 +29,20 @@ void Bonds::setBond(int _siteA, int _siteB, float _strength)
 
 
 /*****************************************************************************
+ *  Count the number of bonds a given spin is being part of
+ *****************************************************************************/
+int Bonds::countNeighbors(int ispin)
+{
+    int n = 0;
+    for (int ibond=0; ibond!=Nbonds; ibond++)
+        if ((ispin==getBond(ibond)->getSiteA()) or 
+            (ispin==getBond(ibond)->getSiteB()))
+           n += 1;
+    return n; 
+}
+
+
+/*****************************************************************************
  * Return coordinates of spins associated with a bond 
  *****************************************************************************/
 pair<int,int> Bonds::getSites(int index)
@@ -59,8 +73,9 @@ float Bonds::getStrength(int index)
 void Bonds::print()
 {
     
-    cout << "---Bonds--- "  << endl;
-    cout << "   Lattice: " << getName() << endl;
+    cout << endl <<  "=== Bonds initialization === "  << endl;
+    cout << "   lattice: " << getName() << endl;
+    cout << "   bonds #: " << Nbonds << endl;
     for (int i=0; i!=Nbonds; i++){
          cout << "   ";
          bonds[i].print();
@@ -95,7 +110,6 @@ Rectangle::Rectangle(int _x, int _y, bool _OBC, float _J):
     name  = "rectangle";
     x = _x;
     y = _y;
-    
     // Define assisting variables used in the loop below
     int siteA;  // coordinates of two spins
     int siteB;  // belonging to a bond 
@@ -103,7 +117,6 @@ Rectangle::Rectangle(int _x, int _y, bool _OBC, float _J):
     // One dimensional systems require a special treatement
     if (y == 1){
         for (int i=0; i!=x-int(_OBC); i++){
-            
             // set up a signle bond per site
             siteA = i;
             siteB = (i+1)%x; // integer arithmetic is required 

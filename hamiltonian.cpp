@@ -6,7 +6,7 @@
  * Initialize spins and interactions, 
  * compute energy offsets due to diagonal operators
 *****************************************************************************/
-Hamiltonian::Hamiltonian(Spins* _spins, Bonds* _bonds, vector<float>* _xfield):
+Hamiltonian::Hamiltonian(Spins* _spins, Bonds* _bonds, vector<float>* _xfield, vector<float>* _zfield):
 spins(*_spins), bonds(*_bonds), xfield(*_xfield)
 {
     cout << "---Hamiltonian initialization---" << endl;

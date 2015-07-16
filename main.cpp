@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
             ("help,h", "produce help message")
             ("state,s",      po::value<string>(),"path to the state file")
             ("process_id,p", po::value<long>()->default_value(0),"random generator seed")
-            ("equil,e",      po::value<long>()->default_value(0),"number of equilibration sweeps to take")
+            ("equil,e",      po::value<long>()->default_value(100),"number of equilibration sweeps to take")
             ("meas,m",       po::value<long>(),"number of measurements to take")
             ("binsize",      po::value<long>()->default_value(100),"number of MC sweeps in one measurement (default = 100)")
             ;
@@ -55,11 +55,13 @@ int main(int argc, char *argv[])
             ("temp,T",       po::value<float>(),"temperature")
             ("beta,B",       po::value<float>(),"inverse temperature")
             ("lattice,L",    po::value<string>()->default_value("rectangle"), boost::str(boost::format("interaction potential type {%s}") % latticeNames).c_str())
+            ("OBC",         po::value<bool>()->default_value(0), "set OBC on a rectangular lattice (default false)")
             ("inter,I",      po::value<string>(),"path to the file with interaction values")
             ("width,X",      po::value<int>(),"lattice width")
             ("height,Y",     po::value<int>(),"lattice height")
             ("unity",        po::value<int>(),"lattice unit cell height")
-            ("trans,D",      po::value<float>(),"strength of the transverse field. Must be positive.")
+            ("long,H",       po::value<float>(),"longitudinal field strength")
+            ("trans,D",      po::value<float>(),"transverse field strength (must be positive)")
             ("ising,J",      po::value<float>(),"Ising term interaction strength")
             ;
     cmdLineOptions.add(simulationOptions).add(physicalOptions);
@@ -139,14 +141,14 @@ int main(int argc, char *argv[])
     // ------------------------------------------------------------------------ 
     // Initialize interactions
     // ------------------------------------------------------------------------ 
-    if  (!(params.count("trans")) and !(params.count("inter"))){
-        cerr << "Error: specify the transverse field (D or I)" << endl;
-        return 1; 
-    }
-    else if (params.count("trans") and params.count("inter")){
-        cerr << "Error: conflicting flags, remove one of them (D and I)" << endl;
-        return 1; 
-    }
+    //if  (!(params.count("trans")) and !(params.count("inter"))){
+    //    cerr << "Error: specify the transverse field (D or I)" << endl;
+    //    return 1; 
+    //}
+    //else if (params.count("trans") and params.count("inter")){
+    //    cerr << "Error: conflicting flags, remove one of them (D and I)" << endl;
+    //    return 1; 
+    //}
 
     
     if  (!(params.count("ising")) and !(params.count("inter"))){
@@ -161,6 +163,7 @@ int main(int argc, char *argv[])
 
     Bonds* bonds;
     vector<float> xfield; 
+    vector<float> zfield; 
     // If interactions are specified in a file, read them off
     if (params.count("inter")){
         
@@ -188,9 +191,11 @@ int main(int argc, char *argv[])
         int   siteA;
         int   siteB;
         float strength;
-        if (nSz!=0){
-            cout << "Error: don't know how to deal with the longitudinal field" << endl;
-            return 1;
+        cout << "---Sz: " << endl;
+        for (int i=0; i!=nSz; i++){
+            fReadBond(&fInter, siteA, siteB, strength);
+            zfield.push_back(strength);
+            cout << "   Site " << siteA << " = " << strength << endl;
         }
         
         cout << "---Sx: " << endl;
@@ -215,7 +220,7 @@ int main(int argc, char *argv[])
     else{
         int Nspins = 0;
         if (params["lattice"].as<string>() == "rectangle"){
-            bonds = new Rectangle(width, height, false, params["ising"].as<float>());
+            bonds = new Rectangle(width, height, params["OBC"].as<bool>(), params["ising"].as<float>());
             Nspins = width*height;
         }
         else{                    
@@ -226,7 +231,8 @@ int main(int argc, char *argv[])
            cout << "Error: no negative values for the transverse field are allowed" << endl;
            return 1;
         } 
-        if (params["trans"].as<float>()!=0) xfield.resize(Nspins, params["trans"].as<float>());
+        if (params.count("trans"))  xfield.resize(Nspins, params["trans"].as<float>());
+        if (params.count("long"))  zfield.resize(Nspins, params["long"].as<float>());
     } 
 
     // ------------------------------------------------------------------------ 
@@ -248,33 +254,33 @@ int main(int argc, char *argv[])
     // ------------------------------------------------------------------------ 
     // Initialize Monte Carlo class 
     // ------------------------------------------------------------------------ 
-    TFIM tfim(spins, bonds, &xfield, params["process_id"].as<long>(), beta, params["binsize"].as<long>());
-    cout << " hm " << endl; 
-    // ------------------------------------------------------------------------ 
-    // Run pre-equilibration only if starting from scratch
-    // ------------------------------------------------------------------------ 
+    TFIM tfim(spins, bonds, &xfield, &zfield, params["process_id"].as<long>(), beta, params["binsize"].as<long>());
+    //------------------------------------------------------------------------ 
+    //Run pre-equilibration only if starting from scratch
+    //------------------------------------------------------------------------ 
     //if  (params.count("state")){
-    //    cout << endl << "Equilibration stage" << endl << endl;
-    //    int NoAdjust;
-    //    NoAdjust=0;
-    //    for (int i=0; i!=params["binsize"].as<long>()*params["equil"].as<long>(); i++){
-    //    
-    //        // Perform  a full MC sweep
-    //        if (tfim.DiagonalMove()==1) tfim.AdjustM();  // diagonal update
-    //        tfim.ConstructLinks();                       // linked list and vertex list construction 
-    //        tfim.OffDiagonalMove();                      // cluster update
-    //        tfim.MapStateBack();                         // mapping back the updated state 
-    //    }
+        cout << endl << "=== Equilibration stage ===" << endl << endl;
+        int NoAdjust;
+        NoAdjust=0;
+        for (int i=0; i!=params["binsize"].as<long>()*params["equil"].as<long>(); i++){
+            if (!tfim.AdjustLoopsN()) NoAdjust += 1;
+            else                      NoAdjust  = 0;
+
+            if (NoAdjust == 10){
+                cout << "  The chain seems to be equilibrated after " << i << " MC updates" << endl;
+                cout << "  Time to be productive! " << endl;
+                break;
+            }        
+        }
     //}
     //else{ 
     //    cout << "No pre-equilibration. Loading from: " << params["state"].as<string>() << endl;
     //}
-    cout << " hmmmm " << endl; 
         
     // ------------------------------------------------------------------------ 
     // Run the main loop 
     // ------------------------------------------------------------------------ 
-    cout << endl << "Measurement stage" << endl << endl;
+    cout << endl << "=== Measurement stage ===" << endl << endl;
     for (long i=0; i!=params["binsize"].as<long>()*params["meas"].as<long>(); i++){
         // Perform  a full MC sweep
         

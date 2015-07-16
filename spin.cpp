@@ -20,8 +20,9 @@ Spins::Spins(int _Nspins, long _seed)
         *spin = pow(-1,rand.uRandInt()%2);                         
     }
 
-    cout << "---Spins object initialization---" << endl;
-    cout << "   # spins: " << Nspins << endl << "   ";
+    cout << endl << "=== Spins initialization ===" << endl;
+    cout << "   spins #: " << Nspins << endl;
+    cout << "   state  : ";
     for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
         cout << *spin << " "; 
     }
@@ -69,7 +70,7 @@ void Spins::flip(int index)
  *****************************************************************************/
 void Spins::print()
 {
-    cout << "   Spins state: " << endl;
+    cout << "   Spins state: " ;
     for (int i=0; i!=Nspins; i++)
         cout << getSpin(i) << " ";
     cout << endl;

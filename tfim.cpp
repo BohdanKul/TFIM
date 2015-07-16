@@ -1,61 +1,129 @@
+#include <stdlib.h> 
 #include <string.h>
 #include <math.h>
 #include <cmath>
 #include "tfim.h"
 #include <algorithm>    // lower_bound
 #include "vertex.cpp"
+#include "directedloop.cpp"
+#include <iomanip>
 
-
-TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, vector<float>* _xfield,
+TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, 
+           vector<float>* _xfield, vector<float>* _zfield,
            long _seed, float _beta, long _binSize):
     RandomBase(_seed),  // initialize ancestor
     communicator(_bonds, _beta,  _seed), 
-    ham(_spins, _bonds, _xfield) // storing a reference, no need to copy 
-    //ap(*_lattice)       // slicing _lattice into its ancestor ap, a copy is created
+    spins(*_spins), bonds(*_bonds)
 {
     // Set up physical variables
     beta   = _beta;
-    Nsites = ham.spins.getSize();
-    Nbonds = ham.bonds.getBondsN();
+    Nspins = spins.getSize();
+    Nbonds = bonds.getBondsN();
 
-    float J12;
-    float h1; float h2;
-    float d1; float d2; 
-    array<array<float, 16>, Nbonds> VWeights;         // vertex weigths for each bond
-    array<array<float,  4>, Nbonds> diagVWeights;     // weigths of only diagonal vertices for each bond
-    float  diagOffset;      // constant added to make all diagonal weigths non-negative
-    array<array<array<float,8>, 16*4>, Nbonds> VProb; // probability of exiting at a vertex leg
-                                                      // given the entrance leg and vertex type;
-                                                      // used in the off-diagonal update
-    tDiagOffset = 0;
+    float  J12;
+    float  h1; float h2;
+    float  d1; float d2; 
+    int    nA; int nB;
+    int siteA; int siteB;
+    tDiagOffset = 0;  
+    float diagOffset; 
+    debug = false;
+
+    cout << endl <<  "=== Computing SSE vertices ===" << endl;
+    vector<int>  solTypes;
+    array<float, 16> VWeights;         // vertex weigths for each bond
     for (auto i=0; i!=Nbonds; i++){
+        cout << "---Bond " << i << ":"<< endl; 
+        // Increament main data structures
+        array<array<float, 8>, 16*8> initP;
+        array<float, 4> initD;
+        VProb.push_back(initP);
+        dWeights.push_back(initD);
+
+        // Unpack bond interactions
         J12 = _bonds->getBond(i)->getStrength();
-        h1  = _zfield->at(_bonds->getBond(i)->getSiteA());
-        h2  = _zfield->at(_bonds->getBond(i)->getSiteB());
-        d1  = _xfield->at(_bonds->getBond(i)->getSiteA());
-        d2  = _xfield->at(_bonds->getBond(i)->getSiteB());
-        getVertices(J12, h1, h2, d1, d2, diagOffset, VWeights[i], diagVWeights[i]);
-        tDiagOffset += diagOffset;
+        
+        siteA = _bonds->getBond(i)->getSiteA();
+        siteB = _bonds->getBond(i)->getSiteB();
+        
+        nA    = _bonds->countNeighbors(siteA);
+        nB    = _bonds->countNeighbors(siteB);
+
+        h1  = _zfield->at(siteA)/(1.0*nA);
+        h2  = _zfield->at(siteB)/(1.0*nB);
+        d1  = _xfield->at(siteA)/(1.0*nA);
+        d2  = _xfield->at(siteB)/(1.0*nB);
+
+        cout << "   J: " << J12 << "; h: (" << h1 << ", " << h2 << "); d: (" << d1 << ", " << d2 << "); Z: (" << nA << ", " << nB <<")" << endl;
+
+        // Redefine diagonal operators by flipping their sign
+        J12 = -J12;
+        h1  = -h1;
+        h2  = -h2;
+        
+        // Get the list of possible vertices on the current bond  
+        getVertices(J12, h1, h2, d1, d2, diagOffset, VWeights, dWeights[i]);
+        
+        cout << "   all  Ws: ";
+        for (int j=0; j!=16; j++)
+            printf("%4.2f ", VWeights[j]) ;
+        cout << endl;
+
+        cout << "   diag Ws: ";
+        for (int j=0; j!=4; j++)
+            printf("%4.2f ", dWeights[i][j]) ;
+        cout << endl;
+
+        cout << "   C: " << diagOffset << endl;
+        
+        // Accumulate the total diagonal offset
+        tDiagOffset += diagOffset;      
+
+        // Get the leg-switch probabilities look-up table for each vertex and leg
+        if (debug) cout << "=== Computing off-diagonal moves probabilities ===" << endl;
+        int l0; int l1; int l2; int l3;
         for (auto vtype=0; vtype!=16; vtype++)
-            for (auto enleg=0; enleg!=4, enleg++)
-                getSwitchLegP(enleg, vtype, VWeights[i], VProb[i][vtype*4+enleg])
+            for (auto enleg=0; enleg!=8; enleg++){
+                getAllLegs(vtype,l0,l1,l2,l3);
+                if (debug) cout << "   for vertex: " << vtype << " leg: " << enleg << " legs state: " << l0 << " " << l1 << " " << l2 << "  " << l3 << endl;
+                solTypes.push_back(getSwitchLegP(enleg, vtype, VWeights, VProb[i][vtype*8+enleg]));
+            }
     }
 
+    cout << endl <<  "=== Solutions to the directed loop equations ===" << endl;
+    for (auto vtype=0; vtype!=16; vtype++)
+        if (VWeights[vtype]!=0.0){
+            cout << "---Vertex " << vtype << ": " << endl;
+            for (auto enleg=0; enleg!=8; enleg++){
+                cout << "   Leg " << enleg;
+                    if (solTypes[vtype*8+enleg]==0) cout << " (N-B): ";  // no-bounce solution
+                    if (solTypes[vtype*8+enleg]==1) cout << " (L-B): ";  // bounce from the largest weight solution
+                    if (solTypes[vtype*8+enleg]==2) cout << " (H-B): ";  // heat-bath bounce solution
+                
+                for (auto exleg=0; exleg!=8; exleg++)
+                    printf("%3.2f; ", VProb[0][vtype*8+enleg][exleg]);
+                
+                if (enleg<4) printf(" Stop  P: %3.2f \n", 1.0-VProb[0][vtype*8+enleg][3]);
+                else         printf(" Start P: %3.2f \n", VProb[0][vtype*8+enleg][3]);
+            }
+        }
+    
     // Initialize algorithmic variables
     n = 0;
     M = round(((float) Nbonds)*beta*1.5);
+    if (M<1) M = 1;
     lOper.resize(M);  
-    lFirst.resize(Nsites,-1);
-    lLast.resize(Nsites,-1);
+    lFirst.resize(Nspins,-1);
+    lLast.resize(Nspins,-1);
     binSize = _binSize;
-    debug = false;
     ID = communicator.getId();
-    
+    nLoops = 1;
+
     // Set up measurement variables
     bMperSite = false;
     bM        = true;
-    aMperSite.resize(Nsites,0);
-    tMperSite.resize(Nsites,0);
+    aMperSite.resize(Nspins,0);
+    tMperSite.resize(Nspins,0);
     an    = 0;
     aTM   = 0;
     nMeas = 0;
@@ -83,47 +151,39 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, vector<float>* _xfield,
     eHeader += boost::str(boost::format("#%15s%16s")%"nT"%"ET"); 
     if (bM)        eHeader += boost::str(boost::format("%16s")%"MT^2"); 
     if (bMperSite)
-        for (int j=0; j!=Nsites; j++)
+        for (int j=0; j!=Nspins; j++)
             eHeader += boost::str(boost::format("%12s%4i") %"M"%j);
 
     *communicator.stream("estimator")<< eHeader << endl;    
 
-    cout << "---Initialization---" << endl;
-    cout << "   Bonds #: " << Nbonds << endl;
-    cout << "   Sites #: " << Nsites << endl;
-
 }
 
 /*****************************************************************************
- * Compute insertation probability of a diagonal operator in the diagonal update
+ * Compute the look-up table for diagonal vertices insertion probability
  *****************************************************************************/
 void TFIM::computeDiagProb()
 {
-    // Commulative insertation probability 
+    // Commulative insertion probability 
     diagProb.clear();
-    
-    float runTotal = 0;                // running total 
-    float Total    = ham.getEtotal();  // the total diagonal energy is used as the normalization
 
-    // Start with opertators acting on a bond
-    for (int index = 0; index!=ham.bonds.getBondsN(); index++){
-        runTotal += 2.0*abs(ham.bonds.getStrength(index));
-        diagProb.push_back(runTotal/Total);
-    }
-    // Compute the total insertation probability of all bond operators
-    bDiagProb = runTotal/Total;
-
-    // Continue with operators acting on seperate sites (field)
-    for (auto elem = ham.xfield.begin(); elem!=ham.xfield.end(); elem++){
-        runTotal += *elem;
-        diagProb.push_back(runTotal/Total);
-    }
+    // Compute the normalization
+    float totalWeight = 0.0;
+    for (auto b=0; b!=Nbonds; b++)
+        for (auto i=0; i!=4; i++)
+            totalWeight += dWeights[b][i];
+        
+    // Compute the cummulative distribution
+    float runTotal = 0;
+    for (auto b=0; b!=Nbonds; b++)
+        for (auto i=0; i!=4; i++){
+            runTotal += dWeights[b][i];
+            diagProb.push_back(runTotal/totalWeight);
+        }
+   
     
-    cout << "---Diagonal probabilities---" << endl;
-    cout << "   Total bond probability: " << bDiagProb << endl << "   ";
-    for (auto dp=diagProb.begin(); dp!=diagProb.end(); dp++){
-        cout << *dp << " ";
-    }
+    cout << endl << "=== Diagonal insertion probabilities ===" << endl << "   ";
+    for (auto dp=diagProb.begin(); dp!=diagProb.end(); dp++)
+        printf("%3.2f; ", *dp);
     cout << endl << endl;
 
 }
@@ -135,137 +195,112 @@ void TFIM::computeDiagProb()
 **************************************************************/
 int TFIM::DiagonalMove()
 {
-    float AccP  =  0;     // acceptance probability
-    int   index;          // site or bond index
-    Spins ap = ham.spins; // propagated in imagenary time spins state
-    int s0;               // two spins state  
-    int s1;
-    float bondJ;          // J_{i,j} constant of sigma^z_i x sigmaz^z_j
-    pair<int,int> cSites; // coordinates of a spin pair
+    int   index;        // array index
+    int   ibond;        // bond index
+    int   vtype;        // vertex type
+    Spins ap = spins;   // propagated in imagenary time spins state
+    int s0;   int s1;   // two spins state  
+    int is0;  int is1;  // two spins indiced 
+    
     bool binsert;         // flag indicating the state of an operator insertation 
 
-
-    long nlast;
-    bool ldebug  = debug;
-    //bool ldebug  = true;
-    // if measuring magnetization per site, reset assisting variables
-    if (bMperSite) {
-        tMperSite.assign(Nsites,0); 
-        nlast = 0;
+    bool ldebug  = false;
+    
+    
+    vector<int> SliceVertices; // list of compatible diagonal vertices for the zero's slice 
+    float SliceWeight = 0;            // the total weight of those vertices.
+    
+    // Compute them
+    for (auto b=0; b!=Nbonds; b++){
+        is0 = bonds.getBond(b)->getSiteA();
+        is1 = bonds.getBond(b)->getSiteB();
+        s0 = ap.getSpin(is0);
+        s1 = ap.getSpin(is1); 
+        SliceVertices.push_back(getCompatibleDiagVertex(s0, s1));
+        SliceWeight += dWeights[b][SliceVertices[b]];
     }
 
     if (ldebug){
-        cout << "---Diagonal Update" << endl;
-        printOperators();
-        ap.print();
-        ham.spins.print();
-        //ham.bonds.print();
+       cout << "---Diagonal move" << endl;
+       cout << "   Spins: " << endl << "   ";
+       for (int i=0; i!=Nspins; i++)
+          cout << spins.getSpin(i) << " ";
+       cout << endl;
+
+       cout << "   Allowed vertices: total weight=" << SliceWeight << endl << "   ";
+       for (int i=0; i!=Nbonds; i++)
+           cout << SliceVertices[i] << " ";
+       cout << endl;
+
+       printOperators();
     }
+
     
+
     // Parse through each operator in the list
     for (auto oper=lOper.begin(); oper!=lOper.end(); oper++){
-        nlast++;
 
-        // If it is a null operator, try insert a diagonal one
-        if (oper->type == -2){
+        // If it is a null operator, try to insert a diagonal one
+        if (oper->type == 2){
             // Compute the probability of inserting a diagonal operator
-            AccP = beta*(ham.getEtotal())/(float) (M-n);
-            if (uRand()<AccP){
-                if (ldebug) cout << "   (" << oper->type << "," << oper->index << ")";  
+            if (uRand() < (beta*SliceWeight/(float) (M-n)) ){
+                // Repeat until a compatible vertex is selected 
                 binsert = false;
-                //do{
-                    // Randomly choose the bond to be inserted 
-                    AccP = uRand(); 
-                    index = lower_bound(diagProb.begin(), diagProb.end(), AccP) - diagProb.begin();      
-                    //cout << endl << "   P = " << AccP << " index = " << index << endl; 
-                    // For one site operator
-                    if (AccP>bDiagProb){
-                        // Determine the site the bond is acting on
-                        index -= ham.bonds.getBondsN();
-                        
-                        // Insert a new operator
-                        oper->set(0,index);
-                        n++;
-                        binsert = true;
-                        if (ldebug) cout <<" -> ("<<oper->type<< ","<<oper->index<<")";
-                    }
-                    // For two sites operator
-                    else{
-                         
-                         // Get all the information required for the bond insertion
-                         cSites = ham.bonds.getSites(index);
-                         s0 = ap.getSpin(cSites.first);
-                         s1 = ap.getSpin(cSites.second);
-                         bondJ = ham.bonds.getStrength(index);
-                         
-                         // Insert new operator only if the local spin configuration is favourable.
-                         // For an antiferromagnetic bond, spins need to be anti-alligned
-                         if ((bondJ > 0 ) and (s0 + s1 == 0)){
-                            oper->set(1,index);
-                            n++;
-                            binsert = true;
-                         } 
-                         // For a ferromagnetic bond, spins need to be alligned
-                         else if ((bondJ < 0) and (s0 + s1 != 0)){
-                             oper->set(1,index);
-                             n++;
-                            binsert = true;
-                         }
-                        if (ldebug) cout <<"-> ("<<oper->type<< ","<<oper->index<<")";
-                    }
-                //} while( !binsert );
-                if (ldebug) cout << endl;
+                do{
+                    // Randomly choose bond and type of the vertex to be inserted 
+                    index = lower_bound(diagProb.begin(), diagProb.end(), uRand()) - diagProb.begin();
+                    ibond = (int) index / 4; 
+                    vtype = index % 4;
 
-                // If there are too many non null operators in the list, 
-                // return an error code
+                    // Get the spins state at the potential bond
+                    s0 = ap.getSpin(bonds.getBond(ibond)->getSiteA()); 
+                    s1 = ap.getSpin(bonds.getBond(ibond)->getSiteB()); 
+
+                    // Insert new operator only if the local spin configuration is favourable
+                    if (getCompatibleDiagVertex(s0,s1) == vtype){
+                       oper->set(1,ibond);
+                       n++;
+                       binsert = true;
+                    }
+                } while( !binsert );
+
+                // If there are too many non null operators in the list, return an error code
                 if ((float)(M)/(float)(n)<1.25){     
                   cout << "M/n = " << (float) M/n << " < " << 1.25 << endl;
                   return 1;   
                 }
             }
         }
-
         // If it is a diagonal operator, try to remove it
-        else if ((oper->type == 0) or (oper->type == 1)){
+        else if (oper->type == 1) {
             // Compute the probability of the removal process
-            AccP = (float)(M-n+1)/(beta*ham.getEtotal());
-            if (ldebug)
-                cout << "   (" << oper->type << "," << oper->index << ") -> (-2,-1)" << endl;  
-            if (uRand()<AccP){
-                oper->set(-2,-1);
+            if (uRand() < ( (float)(M-n+1)/(beta*SliceWeight) )){
+                oper->set(2);
                 n--;
             }
         }
         // Otherwise it must be an off-diagonal operator. It is left as it is.
         // However the propagated spins state need to be modified.
         else{
-            ap.flip(oper->index);
-            if (ldebug){
-                cout << "   offd: " << oper->index << endl;
-                ap.print();
-            }
-           
-            // Accumulate magnetization per site measurement 
-            if (bMperSite){
-                for (int i=0; i!=Nsites; i++)
-                    tMperSite[i] += ap.getSpin(i)*nlast;
-                tMperSite[oper->index] += -2*ap.getSpin(oper->index)*(nlast-1);
-                nlast = 0;
-            }
+            // Get coordinates of the effected spins
+            is0 = bonds.getBond(oper->index)->getSiteA(); 
+            is1 = bonds.getBond(oper->index)->getSiteB(); 
+
+            // Update the propagated spins state
+            if (oper->type == 0 ) ap.flip(is0); 
+            else                  ap.flip(is1); 
+       
+            // Get spins' state
+            s0 = ap.getSpin(is0);
+            s1 = ap.getSpin(is1);
+
+            // Update the list of compatible vertices at the updated slice and their total weight
+            SliceWeight -= dWeights[oper->index][SliceVertices[oper->index]];
+            SliceVertices[oper->index] = getCompatibleDiagVertex(s0, s1);
+            SliceWeight += dWeights[oper->index][SliceVertices[oper->index]];
         }
     }
-    // Accumulate magnetization measurements
-    if (bMperSite){
-        float tTM = 0;
-        for (int i=0; i!=Nsites; i++){
-            aMperSite[i] += (float)(tMperSite[i] + ap.getSpin(i)*nlast)/(float)(M);
-            tTM += aMperSite[i];
-        }
-        //aTM += (1.0*tTM*tTM)/(1.0*Nsites*Nsites);
-    }
-    //cout << "M = " << M << " n = " << n << endl;
     if (ldebug) printOperators();
-    
     return 0;
 }
 
@@ -279,6 +314,35 @@ void TFIM::AdjustM()
     resetMeas();
 }
 
+/**************************************************************
+* Increase length of the operator list 
+**************************************************************/
+bool TFIM::AdjustLoopsN()
+{
+    nFlippedLegs = 0;
+    nBounces     = 0;
+    float visitedFrac = 0.0;
+
+    for (int i=0; i!=binSize; i++){
+        while (DiagonalMove()==1) AdjustM();
+              
+        ConstructLinks();         // linked list and vertex list construction 
+        OffDiagonalMove();        // loop update
+        MapStateBack();           // mapping back the updated state 
+        visitedFrac += (1.0*nFlippedLegs)/(2*M);
+        nFlippedLegs = 0;
+    }
+
+    if (visitedFrac/(binSize*1.0) > 1.0) return false;
+    else{
+        nLoops += 1;
+        cout << ID << ": Flipped fraction=" << setw(1) << setprecision(2) << setfill('0') << visitedFrac/(binSize*1.0) << " 2xM=" << 2.0*M ;
+        cout << " Increasing loops # " << nLoops << endl;
+        return true;
+    }
+}
+
+
 /******************************************************************************
 * Accumulate estimator measurements 
 ******************************************************************************/
@@ -288,17 +352,17 @@ void TFIM::Measure()
     Accumulate(n, an);
 
     long temp = 0;
-    for (int i=0; i!=Nsites; i++){
-        temp += ham.spins.getSpin(i);
+    for (int i=0; i!=Nspins; i++){
+        temp += spins.getSpin(i);
     }
-    aTM += pow((float)(temp)/(float)(Nsites),2);
-    // One sufficient number of measurements are taken, record their average
+    aTM += pow((float)(temp)/(float)(Nspins),2);
+    // Once sufficient number of measurements are taken, record their average
     if (nMeas == binSize){
 
         // Record operators list length and average energy per site
         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(an/(1.0*binSize)));
 
-        float EperSite = -(float)(an)/(float)( binSize*Nsites)/beta + tDiagOffset/(float)(Nsites);
+        float EperSite = -(float)(an)/(float)( binSize*Nspins)/beta + tDiagOffset/(float)(Nspins);
         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %EperSite);
        //cout << an/(1.0*binSize) << " " << EperSite << " "; 
 
@@ -306,10 +370,10 @@ void TFIM::Measure()
         if (bM)
             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aTM/(1.0*binSize)));
 
-        //cout << aTM/(1.0*binSize*Nsites) << " ";
+        //cout << aTM/(1.0*binSize*Nspins) << " ";
         // Record magnetization per site
         if (bMperSite)
-            for (int j=0; j!=Nsites; j++){
+            for (int j=0; j!=Nspins; j++){
                 *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aMperSite[j]/(1.0*binSize)));
                 //cout << aMperSite[j]/(1.0*binSize) << " ";
             }
@@ -331,13 +395,13 @@ void TFIM::Measure(int sampleInd, double* aEnergy, double* aMagnetization)
     Accumulate(n, an);
 
     long temp = 0;
-    for (int i = 0; i != Nsites; i++) {
-        temp += ham.spins.getSpin(i);
+    for (int i = 0; i != Nspins; i++) {
+        temp += spins.getSpin(i);
     }
-    aTM += pow((float)(temp) / (float)(Nsites), 2);
+    aTM += pow((float)(temp) / (float)(Nspins), 2);
     // One sufficient number of measurements are taken, record their average
     if (nMeas == binSize) {
-        float EperSite = -(float)(an) / (float)(binSize * Nsites) / beta + ham.getEoffset() / (float)(Nsites);
+        float EperSite = -(float)(an) / (float)(binSize * Nspins) / beta + tDiagOffset / (float)(Nspins);
         aEnergy[sampleInd] = EperSite;
 
         // Record the total magnetization
@@ -355,121 +419,13 @@ void TFIM::resetMeas()
 {
    nMeas = 0;
    an = 0;
-   if (bMperSite) aMperSite.assign(Nsites,0);
+   if (bMperSite) aMperSite.assign(Nspins,0);
    if (bM)        aTM =0;
+    nFlippedLegs = 0;   
+    nBounces     = 0;   
 
 }
 
-
-
-/**************************************************************
-* Determine the vertex type for a particular operator acting 
-* on a given bond based on its type and index 
-**************************************************************/
-int TFIM::VertexType(int otype, int index, Spins& ap)
-{
-    pair<int,int> cSites;
-    int s0 = -3;
-    int s1 = -3;
-    bool ldebug = debug;
-
-    if (debug){
-        cout << endl << "---Vertex Type" << endl;
-        //printOperators();
-        ap.print();
-        ham.spins.print();
-        //ham.bonds.print();
-        cout << "   type: " << otype << "   index: " << index << endl << endl;
-    }
-    // If it is a two sites operator
-    if (otype == 1){
-        
-        // Determine the spins state
-        cSites = ham.bonds.getSites(index);
-        s0 = ap.getSpin(cSites.first);
-        s1 = ap.getSpin(cSites.second);
-        
-        // Determine vertex type
-        if  ((s0 ==-1) and (s1 ==-1))
-            return 1;
-        if  ((s0 == 1) and (s1 == 1))
-            return 2;
-        if  ((s0 == 1) and (s1 ==-1)){
-            //cout << " Vertex type: impossible configuration " << endl;
-            //exit(0);
-            return 3;
-        }
-        if  ((s0 == -1) and (s1 == 1)){
-            //cout << " Vertex type: impossible configuration " << endl;
-            //exit(0);
-            return 4;
-        }
-    }
-    //if it is a one site operator
-    else{
-        // Determine the spin state
-        s0 = ap.getSpin(index);
-
-        // Deterimine vertex type
-        if ((otype == 0) and (s0 == -1))
-            return 5;
-        if ((otype == 0) and (s0 == 1))
-            return 6;
-        if ((otype == -1) and (s0 == -1))
-            return 7;
-        if ((otype == -1) and (s0 == 1))
-            return 8;
-    }
-      
-    cout << " Vertex type: impossible configuration " << endl;
-    exit(0);
-    
-    return -1;
-} 
-
-/******************************************************************************
-* Vertex type to operator type conversion 
-******************************************************************************/
-int TFIM::VtxToOperator(int vtxType)
-{
-    // This convention corresponds to the one defined in VertexType method
-    if ((vtxType>0) and (vtxType<5)) return  1;  
-    if ((vtxType>4) and (vtxType<7)) return  0;   
-    if ((vtxType>6) and (vtxType<9)) return -1;   
-}
-
-
-/******************************************************************************
-* Determine new vertex type when flipped 
-******************************************************************************/
-int TFIM::VtxFlip(int vtxType, int leg)
-{
-    int fvtxType = -1;
-
-    switch (vtxType){
-        case 1: fvtxType = 2; break;
-        case 2: fvtxType = 1; break;
-        case 3: fvtxType = 4; break;
-        case 4: fvtxType = 3; break;
-        case 5:
-            if (leg==0) fvtxType = 8;
-            else        fvtxType = 7;
-            break;
-        case 6:
-            if (leg==0) fvtxType = 7;
-            else        fvtxType = 8;
-            break;
-        case 7:
-            if (leg==0) fvtxType = 6;
-            else        fvtxType = 5;
-            break;
-        case 8:
-            if (leg==0) fvtxType = 5;
-            else        fvtxType = 6;
-            break;
-    }
-    return fvtxType;    
-}
 
 /******************************************************************************
 * Construct linked list and vertices in preparation for the off-diagonal move
@@ -484,78 +440,67 @@ void TFIM::ConstructLinks()
 */
 
 {
-    //Reinitiate necessary data structures    
-    long p=-1;            // index of current non null operator            
-    int   index;          // site or bond index
-    Spins ap = ham.spins; // propagated in imagenary time spins state
-    pair<int,int> cSites; // coordinates of 2 spins
-    int cSite;            // coordinates of 1 spin    
-    int nbSites;          // number of sites in a bond (2 or 1)
-    bool ldebug = debug;
+    long p=0;        // index of current non-null operator            
+    Spins ap = spins; // propagated in imagenary time spins state
+    array<int,2> is;  // indices of two spins
 
-    fill(lFirst.begin(),lFirst.end(),-1);    //spin's 1st  leg
-    fill(lLast.begin(),lLast.end(),-1);      //spin's last leg
-    lLinks.assign(4*n,-1);                   //linked vertices
-    lVtx.assign(n,-1);                       //vertex type
+    // Reset main data structures
+    fill(lFirst.begin(),lFirst.end(),-1);    // spin's 1st  leg
+    fill(lLast.begin(),lLast.end(),-1);      // spin's last leg
+    lLinks.assign(4*n,-1);                   // linked vertices
+    lVtx.assign(n,-1);                       // vertex type
+    lBond.assign(n,-1);                      // bond indes associated with a vertex
+
+    bool ldebug = false;
 
     if (ldebug){
         cout << "---Construct links " << endl;
         ap.print();
-        //ham.bonds.print();
         printOperators();
     }
     // Start linked list construction
     for (auto oper=lOper.begin(); oper!=lOper.end(); oper++) {
+        //if (ldebug) cout << "(" << oper->type << "," << oper->index << ")" ;
+        
         // Ignore null operators
-        if (ldebug) cout << "(" << oper->type << "," << oper->index << ")" ;
-        if (oper->type != -2){     
-            p++;    
-            index = oper->index;    
+        if (oper->type != 2){     
             
-            // Check wether it is a one or two sites bond
-            if (oper->type == 1){
-                cSites = ham.bonds.getSites(index);
-                nbSites = 2;
-                //cout << "Site A: " << cSites.first << " Site B: " << cSites.second << endl;
-            }
-            else{
-                cSites = pair<int,int> (index, -1);
-                nbSites = 1;
-            }
+            // Get spins' indices affected by the operator
+            is[0] = bonds.getBond(oper->index)->getSiteA(); 
+            is[1] = bonds.getBond(oper->index)->getSiteB(); 
             
-            //Go through those sites 
-            for (int a=0; a!=nbSites; a++){           
-                if (a==0) cSite = get<0>(cSites);
-                else      cSite = get<1>(cSites);
-                
-                //Has this site been already acted upon?
-                if (lLast[cSite] != -1){   
-                    lLinks[4*p+a]    = lLast[cSite];    //Construct a link between 2 legs
-                    lLinks[lLast[cSite]] = 4*p+a;
+            // Go through legs associated with those spins at the current slice
+            for (int i=0; i!=2; i++){
+                // If this is not a first slice leg
+                if (lLast[is[i]] != -1){
+                   
+                    //Construct a new link  
+                   lLinks[4*p + i]      = lLast[is[i]];    
+                   lLinks[lLast[is[i]]] = 4*p + i;
                 }
-                
-                //Record this first occurence 
+                // Otherwise, remember its coordinate 
                 else{
-                    lFirst[cSite] = 4*p+a; 
+                    lFirst[is[i]] = 4*p+i; 
                 }
-                
-                //Update the last acted leg on the site
-                lLast[cSite]  = 4*p+3-a ;       
-            }
-           
-            //Record the vertex type
-            lVtx[p] = VertexType(oper->type, oper->index, ap);            
-            
-            // Propagate the spins state if it is an off-diagonal operator
-            if  (oper->type == -1){
-                ap.flip(index);                        
-            }
-            
-        }
 
+                // Always update the last leg
+                lLast[is[i]]  = 4*p+3-i ;   
+            }        
+            
+            //Record the vertex type and associated bond index
+            lVtx[p]  = getVertexID(ap.getSpin(is[0]), ap.getSpin(is[1]), oper->type);            
+            lBond[p] = oper->index;
+
+            // Propagate the spins state if it is an off-diagonal operator
+            if      (oper->type ==  0) ap.flip(is[0]); 
+            else if (oper->type == -1) ap.flip(is[1]); 
+            
+        p++;    
+        }
     }
+    
     //Construct links across the periodic boundary in the p-expansion
-    for (int lspin=0; lspin!=ham.spins.getSize(); lspin++){
+    for (int lspin=0; lspin!=spins.getSize(); lspin++){
         if (lLast[lspin] != -1){
             lLinks[lLast[lspin]]  = lFirst[lspin];
             lLinks[lFirst[lspin]] = lLast[lspin];
@@ -567,7 +512,7 @@ void TFIM::ConstructLinks()
     //printIntVector(&lVtx,   "Vertices");
 
     if (ldebug){
-        cout << endl << "   Construct links. " << endl;
+        //cout << endl << "   Construct links. " << endl;
         ap.print();
         //ham.bonds.print();
     }
@@ -585,25 +530,24 @@ void TFIM::MapStateBack()
     
     // Map back the vertices state to the operators state
     for (auto oper=lOper.begin(); oper!=lOper.end(); oper++){
-        if (oper->type != -2){
+        if (oper->type != 2){
            p++;                                         
-           oper->type = VtxToOperator(lVtx[p]);
+           oper->type = VertexToOperator(lVtx[p]);
         } 
     }
     //cout << "    Map spins state back " << endl;
     // Map back the spins state     
-    for (long i=0; i!=ham.spins.getSize(); i++){
+    for (long i=0; i!=Nspins; i++){
         // Try to flip the spin if it is not acted by an operator 
         if  (lFirst[i]==-1){
-            if (uRand()<0.5)
-                ham.spins.flip(i);
+            if (uRand()<0.5) spins.flip(i);
         }                                    
         else{        
             // Get the coordinates of the first leg over this site            
             p   = (long) lFirst[i]/4; 
             leg = lFirst[i]%4;
             //cout << "Spin " << i << " Bond: " << p << " leg: " << leg << " vtx: " << lVtx[p] << " leg spin: " << LegSpin[lVtx[p]-1][leg] << endl;
-            ham.spins.setSpin(i, LegSpin[lVtx[p]-1][leg]);
+            spins.setSpin(i, getLeg(lVtx[p], leg));
         }
     }
     //cout << "    Map spins state back. " << endl;
@@ -615,90 +559,89 @@ void TFIM::MapStateBack()
 ******************************************************************************/
 int TFIM::OffDiagonalMove()
 {
-    stack<int> cluster;     // encountered legs during a cluster construction
-    lMarked.assign(4*n,-1); // already marked legs 
-    int Nclusters = 0;      // number of constructed clusters
-    long  leg;               // leg full index
-    long p;                 // bond index
-    int  l;                 // leg index on a vertex
-    bool flip;
-    bool ldebug = debug;
+    long enleg; // entrance leg
+    long exleg; // exit leg
+    int  l;     // full leg's coordinates 
+    long p;     // operator index
+    float accP = 0;
+    //bool ldebug = debug;
+    bool ldebug = false;
 
     if (ldebug) {
         cout << "---Off-diagonal update" << endl;
-        cout << "   n = " << n << endl;
-        printIntVector(&lVtx, "   vert: ");
+        cout << "   n = " << n << " loops # = " << nLoops << endl;
+        printIntVector(&lVtx,   "   vert: ");
         printIntVector(&lLinks, "   link: ");
+        printIntVector(&lBond,  "   bond: ");
     }
-    // Go through each leg
-    for (int i=0; i!=4*n; i++){
+    if (n==0) return 1;
 
-        // If it belongs to a valid link 
-        if (lLinks[i]!=-1){
+    array<float, 8>* SwitchLegP; 
+  
+    // Build a pre-set number of loops  
+    for (long i=0; i!=nLoops; i++){ 
+        // Randomly choose the starting leg out of all legs 
+        l = uRandInt()%(4*n);
 
-            // And it hasn't been marked yet
-            if (lMarked[i]==-1){
-
-                // Initiate a new cluster from this leg
-                Nclusters++;
-                cluster.push(i);
-                // Should we flip it?
-                if (uRand()<0.5) flip = true;
-                else             flip = false;
-                
-                if (ldebug){
-                    cout << "   Cluster# " << Nclusters << " flipping: " << (bool) flip << endl;//<< " Legs: [" << endl;
-                }
-                //cout << "-- New cluster " << Nclusters << endl << " flip: " << flip << endl; 
-
-                // Repeat while the stack of all encountered lack is not exausted
-                while(!cluster.empty()){
-                    leg = cluster.top();
-                    cluster.pop();
-                    if (ldebug) cout << "   cleg: " << leg << endl;
-                    // If a previously unmarked vertex is encountered
-                    if (lMarked[leg]==-1){
-                        lMarked[leg] = Nclusters;
-                        //if (ldebug){
-                        //    cout << "   mark: "; 
-                        //    for (auto mark=lMarked.begin(); mark!=lMarked.end(); mark++){
-                        //        cout << *mark << " ";
-                        //    }
-                        //    cout << endl;
-                        //}
-                        // Flip it
-                        p = (long) leg/4;
-                        l = leg%4;
-                        if (ldebug) cout << "    flipping vtx " << p << " (" <<lVtx[p] << "->" << VtxFlip(lVtx[p],l)<< ")" << endl;
-                        if (flip) lVtx[p] = VtxFlip(lVtx[p],l);
-                        // Mark all vertex legs if it is a two-sites diagonal operator
-                        if (VtxToOperator(lVtx[p])==1)
-                            for (int j=0; j!=4; j++){
-                                if (j!=l){
-                                   lMarked[4*p+j] = Nclusters;
-                                   cluster.push(4*p+j); 
-                                    //if (ldebug){
-                                    //    cout << "   mark: "; 
-                                    //    for (auto mark=lMarked.begin(); mark!=lMarked.end(); mark++){
-                                    //        cout << *mark << " ";
-                                    //    }
-                                    //cout << endl;
-                                    //}
-                                //cout << "    adding leg " << 4*p+j << endl;
-                                }
-                            }
-                    }
-                    // Move to the next leg connected with a link
-                    if (lMarked[lLinks[leg]]==-1)
-                        cluster.push(lLinks[leg]);
-                }
-                //cout << "]" <<endl;
-            }
+        // Make a vertex move
+        p   = (long) l/4;
+        enleg = l%4;
+        SwitchLegP = &(VProb[lBond[p]][lVtx[p]*8+enleg+4]);  // the entrance leg is not flipped (+4)
+        
+        
+        accP = uRand();
+        exleg = lower_bound(SwitchLegP->begin(), SwitchLegP->end(), accP) - SwitchLegP->begin();
+        if (ldebug){
+           cout << "   Loop " << i << endl;
+           cout << "   l=" << l << " p=" << p << " enleg=" << enleg << " exleg=" << exleg<< " vtx: " << lVtx[p] << " -> "; 
         }
-    }
-    if (ldebug) printIntVector(&lVtx, "   vert: ");
-    
-    return Nclusters;
+        // Modify the vertex id
+        lVtx[p] = FlipVertex(lVtx[p], enleg+4, exleg);
+        if (ldebug){
+            cout << lVtx[p] << endl << "   RN=" << accP << " Switch P: ";
+            if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
+               cout << "ERROR: non-allowed vertex is encountered" << endl;
+               exit(0);
+            }
+            for (int i=0; i!=8; i++)
+                cout << SwitchLegP->at(i)<< " ";
+            cout << endl;
+        }
+
+        // Unless the new leg is unchanged, keep building the loop
+        while (exleg<4){
+            // Go to the link connected leg on the next vertex
+            l = p*4 + exleg;
+            l = lLinks[l];
+
+            // Make a vertex move
+            p   = (long) l/4;
+            enleg = l%4;
+            SwitchLegP = &(VProb[lBond[p]][lVtx[p]*8+enleg]);
+            accP = uRand();
+            exleg = lower_bound(SwitchLegP->begin(), SwitchLegP->end(), accP) - SwitchLegP->begin();
+            if (ldebug)
+               cout << "      l=" << l << " p=" << p << " enleg=" << enleg << " exleg=" << exleg<< " vtx: " << lVtx[p] << " -> "; 
+
+            // Modify the vertex id
+            lVtx[p] = FlipVertex(lVtx[p], enleg, exleg);
+            if (ldebug){
+                cout << lVtx[p] << endl << "      RN=" << accP << " Switch P: ";
+                if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
+                   cout << endl << "ERROR: non-allowed vertex is encountered" << endl;
+                   exit(0);
+                }
+                for (int i=0; i!=8; i++)
+                    cout << SwitchLegP->at(i)<< " ";
+                cout << endl;
+            }
+
+           // Gather loop  statistics;
+            if (exleg != enleg) nFlippedLegs += 2;
+            else                nBounces     += 1; 
+        } 
+    } 
+    return 0;
 }
 
 /******************************************************************************
