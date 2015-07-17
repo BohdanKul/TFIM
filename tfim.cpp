@@ -91,6 +91,8 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
     }
 
     cout << endl <<  "=== Solutions to the directed loop equations ===" << endl;
+    float stopP;
+    float startP;
     for (auto vtype=0; vtype!=16; vtype++)
         if (VWeights[vtype]!=0.0){
             cout << "---Vertex " << vtype << ": " << endl;
@@ -103,8 +105,16 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
                 for (auto exleg=0; exleg!=8; exleg++)
                     printf("%3.2f; ", VProb[0][vtype*8+enleg][exleg]);
                 
-                if (enleg<4) printf(" Stop  P: %3.2f \n", 1.0-VProb[0][vtype*8+enleg][3]);
-                else         printf(" Start P: %3.2f \n", VProb[0][vtype*8+enleg][3]);
+                if (enleg<4){
+                    if (VProb[0][vtype*8+enleg][3] != -1.0) stopP = 1.0 - VProb[0][vtype*8+enleg][3];
+                    else                                    stopP = 1.0;
+                    printf(" Stop  P: %3.2f \n", stopP);
+                }
+                else{
+                    if (VProb[0][vtype*8+enleg][3] != -1.0) startP = VProb[0][vtype*8+enleg][3];
+                    else                                    startP = 0.0;
+                    printf(" Start P: %3.2f \n", startP);
+                }
             }
         }
     

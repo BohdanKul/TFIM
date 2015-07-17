@@ -222,6 +222,16 @@ int getSwitchLegP(const int& enleg, int vtype, array<float, 16>& VWeights, array
     for (auto i=1; i!=8; i++)
         prob[i] = prob[i] + prob[i-1];
 
+    // Due to the algorithmic implementation particularity (lower_bound function),
+    // all first zero-valued entries must be set to a negative number. This is done
+    // in order to avoid the possibility of switching to the corresponding leg 
+    // upon generation of a random number which exactly equals to 0. 
+    int i=0;
+    while (prob[i]==0.0){
+        prob[i] = -1.0;
+        i += 1;
+    }
+
     if (sdebug){ 
         cout << "      Probs: ";
         for (int i=0; i!= 8; i++){
