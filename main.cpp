@@ -55,7 +55,8 @@ int main(int argc, char *argv[])
             ("temp,T",       po::value<float>(),"temperature")
             ("beta,B",       po::value<float>(),"inverse temperature")
             ("lattice,L",    po::value<string>()->default_value("rectangle"), boost::str(boost::format("interaction potential type {%s}") % latticeNames).c_str())
-            ("OBC",         po::value<bool>()->default_value(0), "set OBC on a rectangular lattice (default false)")
+            ("OBC",          po::value<bool>()->default_value(0), "set OBC on a rectangular lattice (default false)")
+            ("clamped,C",    po::value<string>(),"path to the file with the state of clamped qubits")
             ("inter,I",      po::value<string>(),"path to the file with interaction values")
             ("width,X",      po::value<int>(),"lattice width")
             ("height,Y",     po::value<int>(),"lattice height")
@@ -231,7 +232,7 @@ int main(int argc, char *argv[])
            cout << "Error: no negative values for the transverse field are allowed" << endl;
            return 1;
         } 
-        if (params.count("trans"))  xfield.resize(Nspins, params["trans"].as<float>());
+        if (params.count("trans")) xfield.resize(Nspins, params["trans"].as<float>());
         if (params.count("long"))  zfield.resize(Nspins, params["long"].as<float>());
     } 
 
@@ -239,16 +240,51 @@ int main(int argc, char *argv[])
     // Initialize spins 
     // ------------------------------------------------------------------------ 
     Spins * spins;
-    if (params["lattice"].as<string>() == "rectangle") spins = new Spins(width*height, params["process_id"].as<long>());
-    if (params["lattice"].as<string>() == "chimera")   spins = new Spins(width*height*unitWidth*unitHeight, params["process_id"].as<long>());
+    
+    // Determine the number of spins
+    int Nspins = -1;
+    if (params["lattice"].as<string>() == "rectangle") Nspins = width*height;
+    if (params["lattice"].as<string>() == "chimera")   Nspins = width*height*unitWidth*unitHeight;
     if (params["lattice"].as<string>() == "general"){
-       int Nspins = xfield.size();
-       if (Nspins==0){
-          cout << "Error: cannot extract the size of the general lattice from " << params["inter"].as<string>() << endl;
-          return 1;
-       }
-       else spins = new Spins(Nspins, params["process_id"].as<long>());
+        Nspins = xfield.size();
+        if (Nspins==0) Nspins = zfield.size();
+        if (Nspins==0){
+           cout << "Error: cannot extract the size of the general lattice from " << params["inter"].as<string>() << endl;
+           return 1;
+        }
     }
+    
+    // Initialize them from a pre-set configuration if needed
+    if (not params.count("clamped")){
+        spins = new Spins(Nspins, params["process_id"].as<long>());
+    }
+    else{     
+        cout << "Loading the state of clamped qubits from: " << params["clamped"].as<string>() << endl;
+    
+        fstream fClamped(params["clamped"].as<string>(), ios_base::in);
+        string         sbuf;
+        istringstream  ssbuf;
+    
+        // Read off the first line only 
+        getline(fClamped, sbuf);
+        ssbuf.str(sbuf);
+    
+        vector<int> clamped;
+        int spin;
+        while (ssbuf >> spin){
+              if (spin!=1 and spin!=-1 and spin!=0){ 
+                 cout << "Error: impossible qubit state " << spin << " encountered" << endl;
+                 return 1;
+              }
+              clamped.push_back(spin);
+        }
+        if (clamped.size() != Nspins){
+           cout << "Error: number of qubits "<< clamped.size() << " is inconsistent with the hamiltonian" << Nspins << endl;
+           return 1;
+        }
+        spins = new Spins(Nspins, params["process_id"].as<long>(), clamped);
+    }
+        
 
 
     // ------------------------------------------------------------------------ 

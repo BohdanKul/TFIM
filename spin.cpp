@@ -16,12 +16,48 @@ Spins::Spins(int _Nspins, long _seed)
     // Initialize spins randomly with values 1 and -1
     Nspins = _Nspins;
     spins.resize(Nspins,0);
+    bspins.resize(Nspins,false);
     for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
         *spin = pow(-1,rand.uRandInt()%2);                         
     }
 
     cout << endl << "=== Spins initialization ===" << endl;
-    cout << "   spins #: " << Nspins << endl;
+    cout << "   spins #: " << Nspins << " Fully unclamped" <<  endl;
+    cout << "   state  : ";
+    for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
+        cout << *spin << " "; 
+    }
+    cout << endl << endl;
+
+}
+
+/*****************************************************************************
+ * Initializes spins in a random state without underlying geometry
+ *****************************************************************************/
+Spins::Spins(int _Nspins, long _seed, vector<int>& _clamped)
+/*
+    _Nspins  - sets the size of spins vectors
+    _clamped - the state of clamped qubits 
+    _seed    - initializes the random number generator necessary 
+               to generate a random distribution of spins
+*/
+{
+    RandomBase  rand(_seed);     // random numbers generator
+   
+    Nspins = _Nspins;
+    spins.resize(Nspins,0);
+    bspins.resize(Nspins,false);
+    for (int ispin=0; ispin!=Nspins; ispin++) {                          
+        if (_clamped[ispin] == 0) 
+            spins[ispin] = pow(-1,rand.uRandInt()%2);                     
+        else{   
+            spins[ispin] = _clamped[ispin];                         
+            bspins[ispin] = true;
+        }
+    }
+
+    cout << endl << "=== Spins initialization ===" << endl;
+    cout << "   spins #: " << Nspins << " clamped" <<  endl;
     cout << "   state  : ";
     for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
         cout << *spin << " "; 

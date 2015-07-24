@@ -32,19 +32,44 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
     cout << endl <<  "=== Computing SSE vertices ===" << endl;
     vector<int>  solTypes;
     array<float, 16> VWeights;         // vertex weigths for each bond
-    for (auto i=0; i!=Nbonds; i++){
-        cout << "---Bond " << i << ":"<< endl; 
+    
+    // All possible combinations of clamped legs on a vertex
+    //array<array<int>, 16> clampedLegs = {{
+    //                                      {false, false, false, false},
+    //                                      {false, false, false, true },
+    //                                      {false, false, true,  false},
+    //                                      {false, false, true,  true },
+    //                                      {false, true,  false, false},
+    //                                      {false, true,  false, true },
+    //                                      {false, true,  true,  false},
+    //                                      {false, true,  true,  true },
+    //                                      {true,  false, false, false},
+    //                                      {true,  false, false, true },
+    //                                      {true,  false, true,  false},
+    //                                      {true,  false, true,  true },
+    //                                      {true,  true,  false, false},
+    //                                      {true,  true,  false, true },
+    //                                      {true,  true,  true,  false},
+    //                                      {true,  true,  true,  true }
+    //                                    }};
+
+    
+    int l0; int l1; int l2; int l3;
+    array<bool, 4> clampedLegs;
+    // For each bond
+    for (auto ibond=0; ibond!=Nbonds; ibond++){
+        cout << "---Bond " << ibond << ":"<< endl; 
         // Increament main data structures
-        array<array<float, 8>, 16*8> initP;
-        array<float, 4> initD;
+        array<array<array<float, 8>, 16*8>, 16> initP;
         VProb.push_back(initP);
+        array<float, 4> initD;
         dWeights.push_back(initD);
 
         // Unpack bond interactions
-        J12 = _bonds->getBond(i)->getStrength();
+        J12 = _bonds->getBond(ibond)->getStrength();
         
-        siteA = _bonds->getBond(i)->getSiteA();
-        siteB = _bonds->getBond(i)->getSiteB();
+        siteA = _bonds->getBond(ibond)->getSiteA();
+        siteB = _bonds->getBond(ibond)->getSiteB();
         
         nA    = _bonds->countNeighbors(siteA);
         nB    = _bonds->countNeighbors(siteB);
@@ -62,7 +87,7 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
         h2  = -h2;
         
         // Get the list of possible vertices on the current bond  
-        getVertices(J12, h1, h2, d1, d2, diagOffset, VWeights, dWeights[i]);
+        getVertices(J12, h1, h2, d1, d2, diagOffset, VWeights, dWeights[ibond]);
         
         cout << "   all  Ws: ";
         for (int j=0; j!=16; j++)
@@ -71,7 +96,7 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
 
         cout << "   diag Ws: ";
         for (int j=0; j!=4; j++)
-            printf("%4.2f ", dWeights[i][j]) ;
+            printf("%4.2f ", dWeights[ibond][j]) ;
         cout << endl;
 
         cout << "   C: " << diagOffset << endl;
@@ -81,43 +106,48 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
 
         // Get the leg-switch probabilities look-up table for each vertex and leg
         if (debug) cout << "=== Computing off-diagonal moves probabilities ===" << endl;
-        int l0; int l1; int l2; int l3;
-        for (auto vtype=0; vtype!=16; vtype++)
-            for (auto enleg=0; enleg!=8; enleg++){
-                getAllLegs(vtype,l0,l1,l2,l3);
-                if (debug) cout << "   for vertex: " << vtype << " leg: " << enleg << " legs state: " << l0 << " " << l1 << " " << l2 << "  " << l3 << endl;
-                solTypes.push_back(getSwitchLegP(enleg, vtype, VWeights, VProb[i][vtype*8+enleg]));
-            }
+        
+        // For each combination of clamped legs
+        for (auto iclamp=0; iclamp!=16; iclamp++){
+            getAllLegs(iclamp, l0, l1, l2, l3);
+            clampedLegs = { l0 == 1, l1 == 1, l2 == 1, l3 == 1};
+            for (auto vtype=0; vtype!=16; vtype++)
+                for (auto enleg=0; enleg!=8; enleg++)
+                    solTypes.push_back(getSwitchLegP(enleg, vtype, clampedLegs, VWeights, VProb[ibond][iclamp][vtype*8+enleg]));
+        }
     }
 
     cout << endl <<  "=== Solutions to the directed loop equations ===" << endl;
     float stopP;
     float startP;
-    for (auto vtype=0; vtype!=16; vtype++)
-        if (VWeights[vtype]!=0.0){
-            cout << "---Vertex " << vtype << ": " << endl;
-            for (auto enleg=0; enleg!=8; enleg++){
-                cout << "   Leg " << enleg;
-                    if (solTypes[vtype*8+enleg]==0) cout << " (N-B): ";  // no-bounce solution
-                    if (solTypes[vtype*8+enleg]==1) cout << " (L-B): ";  // bounce from the largest weight solution
-                    if (solTypes[vtype*8+enleg]==2) cout << " (H-B): ";  // heat-bath bounce solution
-                
-                for (auto exleg=0; exleg!=8; exleg++)
-                    printf("%3.2f; ", VProb[0][vtype*8+enleg][exleg]);
-                
-                if (enleg<4){
-                    if (VProb[0][vtype*8+enleg][3] != -1.0) stopP = 1.0 - VProb[0][vtype*8+enleg][3];
-                    else                                    stopP = 1.0;
-                    printf(" Stop  P: %3.2f \n", stopP);
-                }
-                else{
-                    if (VProb[0][vtype*8+enleg][3] != -1.0) startP = VProb[0][vtype*8+enleg][3];
-                    else                                    startP = 0.0;
-                    printf(" Start P: %3.2f \n", startP);
+    int iclamp = 15;
+    for (auto ibond=0; ibond!=1; ibond++){
+        cout << endl << "===Bond " << ibond << "=== " << endl;
+        for (auto vtype=0; vtype!=16; vtype++)
+            if (VWeights[vtype]!=0.0){
+                cout << "---Vertex " << vtype << ": " << endl;
+                for (auto enleg=0; enleg!=8; enleg++){
+                    cout << "   Leg " << enleg;
+                        if (solTypes[vtype*8+enleg]==0) cout << " (N-B): ";  // no-bounce solution
+                        if (solTypes[vtype*8+enleg]==1) cout << " (L-B): ";  // bounce from the largest weight solution
+                        if (solTypes[vtype*8+enleg]==2) cout << " (H-B): ";  // heat-bath bounce solution
+                    
+                    for (auto exleg=0; exleg!=8; exleg++)
+                        printf("%3.2f; ", VProb[ibond][iclamp][vtype*8+enleg][exleg]);
+                    
+                    if (enleg<4){
+                        if (VProb[ibond][iclamp][vtype*8+enleg][3] != -1.0) stopP = 1.0 - VProb[ibond][iclamp][vtype*8+enleg][3];
+                        else                                       stopP = 1.0;
+                        printf(" Stop  P: %3.2f \n", stopP);
+                    }
+                    else{
+                        if (VProb[ibond][iclamp][vtype*8+enleg][3] != -1.0) startP = VProb[ibond][iclamp][vtype*8+enleg][3];
+                        else                                       startP = 0.0;
+                        printf(" Start P: %3.2f \n", startP);
+                    }
                 }
             }
-        }
-    
+    } 
     // Initialize algorithmic variables
     n = 0;
     M = round(((float) Nbonds)*beta*1.5);
@@ -214,7 +244,8 @@ int TFIM::DiagonalMove()
     
     bool binsert;         // flag indicating the state of an operator insertation 
 
-    bool ldebug  = false;
+    bool ldebug = false;
+    if (debug)  ldebug = true;
     
     
     vector<int> SliceVertices; // list of compatible diagonal vertices for the zero's slice 
@@ -462,6 +493,7 @@ void TFIM::ConstructLinks()
     lLinks.assign(4*n,-1);                   // linked vertices
     lVtx.assign(n,-1);                       // vertex type
     lBond.assign(n,-1);                      // bond indes associated with a vertex
+    lClamped.assign(n, {false, false, false, false, false});
 
     bool ldebug = false;
 
@@ -493,6 +525,11 @@ void TFIM::ConstructLinks()
                 // Otherwise, remember its coordinate 
                 else{
                     lFirst[is[i]] = 4*p+i; 
+                    // If clamped, mark the vertex
+                    if (spins.isClamped(is[i])){
+                        lClamped[p][0]   = true;    // mark vertex as clamped
+                        lClamped[p][i+1] = true;    // mark leg as clamped
+                    }
                 }
 
                 // Always update the last leg
@@ -512,10 +549,21 @@ void TFIM::ConstructLinks()
     }
     
     //Construct links across the periodic boundary in the p-expansion
+    int l;
     for (int lspin=0; lspin!=spins.getSize(); lspin++){
         if (lLast[lspin] != -1){
-            lLinks[lLast[lspin]]  = lFirst[lspin];
-            lLinks[lFirst[lspin]] = lLast[lspin];
+            // If clamped, mark the vertex
+            if (spins.isClamped(lspin)){
+                p = (long) lLast[lspin]/4;  // vertex coordinate
+                l =        lLast[lspin]%4;  // leg coordinate
+                lClamped[p][0]   = true;    // mark vertex as clamped
+                lClamped[p][l+1] = true;    // mark leg as clamped
+            }
+            // If clamped, there is no need to construct a PBC link
+            else{
+                lLinks[lLast[lspin]]  = lFirst[lspin];
+                lLinks[lFirst[lspin]] = lLast[lspin];
+            }
         }
     }
     //printIntVector(&lLinks, "Links");
@@ -535,40 +583,6 @@ void TFIM::ConstructLinks()
 /******************************************************************************
 * Map the updated state of vertices back to spins-operators state 
 ******************************************************************************/
-void TFIM::MapStateBack()
-{
-    int p   = -1;     //non null operator index
-    int leg = -1;     //leg index
-    
-    // Map back the vertices state to the operators state
-    for (auto oper=lOper.begin(); oper!=lOper.end(); oper++){
-        if (oper->type != 2){
-           p++;                                         
-           oper->type = VertexToOperator(lVtx[p]);
-        } 
-    }
-    //cout << "    Map spins state back " << endl;
-    // Map back the spins state     
-    for (long i=0; i!=Nspins; i++){
-        // Try to flip the spin if it is not acted by an operator 
-        if  (lFirst[i]==-1){
-            if (uRand()<0.5) spins.flip(i);
-        }                                    
-        else{        
-            // Get the coordinates of the first leg over this site            
-            p   = (long) lFirst[i]/4; 
-            leg = lFirst[i]%4;
-            //cout << "Spin " << i << " Bond: " << p << " leg: " << leg << " vtx: " << lVtx[p] << " leg spin: " << LegSpin[lVtx[p]-1][leg] << endl;
-            spins.setSpin(i, getLeg(lVtx[p], leg));
-        }
-    }
-    //cout << "    Map spins state back. " << endl;
-}
-
-
-/******************************************************************************
-* Map the updated state of vertices back to spins-operators state 
-******************************************************************************/
 int TFIM::OffDiagonalMove()
 {
     long enleg; // entrance leg
@@ -576,8 +590,9 @@ int TFIM::OffDiagonalMove()
     int  l;     // full leg's coordinates 
     long p;     // operator index
     float accP = 0;
-    //bool ldebug = debug;
     bool ldebug = false;
+    if (debug)  ldebug = true;
+    int clampid;
 
     if (ldebug) {
         cout << "---Off-diagonal update" << endl;
@@ -585,6 +600,14 @@ int TFIM::OffDiagonalMove()
         printIntVector(&lVtx,   "   vert: ");
         printIntVector(&lLinks, "   link: ");
         printIntVector(&lBond,  "   bond: ");
+        cout << "   clamped: "; 
+        for (int i=0; i!=n; i++){
+            cout << "(";
+            for (int j=0; j!=5; j++)
+                cout << lClamped[i][j] << " ";
+            cout << ") ";
+        }
+        cout << endl;
     }
     if (n==0) return 1;
 
@@ -598,23 +621,31 @@ int TFIM::OffDiagonalMove()
         // Make a vertex move
         p   = (long) l/4;
         enleg = l%4;
-        SwitchLegP = &(VProb[lBond[p]][lVtx[p]*8+enleg+4]);  // the entrance leg is not flipped (+4)
+        if (lClamped[p][0]){
+           clampid = getVertexID(((int) lClamped[p][1])*2-1, 
+                                 ((int) lClamped[p][2])*2-1, 
+                                 ((int) lClamped[p][3])*2-1, 
+                                 ((int) lClamped[p][4])*2-1);
+            SwitchLegP = &(VProb[lBond[p]][clampid][lVtx[p]*8+enleg+4]);  // the entrance leg is not flipped (+4)
+        } 
+        else
+            SwitchLegP = &(VProb[lBond[p]][0][lVtx[p]*8+enleg+4]);  // the entrance leg is not flipped (+4)
         
         
         accP = uRand();
         exleg = lower_bound(SwitchLegP->begin(), SwitchLegP->end(), accP) - SwitchLegP->begin();
         if (ldebug){
            cout << "   Loop " << i << endl;
-           cout << "   l=" << l << " p=" << p << " enleg=" << enleg << " exleg=" << exleg<< " vtx: " << lVtx[p] << " -> "; 
+           cout << "   l=" << l << " p=" << p << " bond=" << lBond[p] << " clamped=" << lClamped[p][0] << " enleg=" << enleg << " exleg=" << exleg<< " vtx: " << lVtx[p] << " -> "; 
         }
         // Modify the vertex id
         lVtx[p] = FlipVertex(lVtx[p], enleg+4, exleg);
+        if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
+           cout << "ERROR: non-allowed vertex is encountered" << endl;
+           exit(0);
+        }
         if (ldebug){
             cout << lVtx[p] << endl << "   RN=" << accP << " Switch P: ";
-            if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
-               cout << "ERROR: non-allowed vertex is encountered" << endl;
-               exit(0);
-            }
             for (int i=0; i!=8; i++)
                 cout << SwitchLegP->at(i)<< " ";
             cout << endl;
@@ -633,18 +664,24 @@ int TFIM::OffDiagonalMove()
             // Make a vertex move
             p   = (long) l/4;
             enleg = l%4;
-            SwitchLegP = &(VProb[lBond[p]][lVtx[p]*8+enleg]);
+            if (lClamped[p][0]){
+               clampid = getVertexID(((int) lClamped[p][1])*2-1, 
+                                     ((int) lClamped[p][2])*2-1, 
+                                     ((int) lClamped[p][3])*2-1, 
+                                     ((int) lClamped[p][4])*2-1); 
+                SwitchLegP = &(VProb[lBond[p]][clampid][lVtx[p]*8+enleg]);  // the entrance leg is not flipped (+4)
+            } 
+            else
+                SwitchLegP = &(VProb[lBond[p]][0][lVtx[p]*8+enleg]);  // the entrance leg is not flipped (+4)
+            
             accP = uRand();
             exleg = lower_bound(SwitchLegP->begin(), SwitchLegP->end(), accP) - SwitchLegP->begin();
             if (ldebug)
-               cout << "      l=" << l << " p=" << p << " enleg=" << enleg << " exleg=" << exleg<< " vtx: " << lVtx[p] << " -> "; 
+               cout << "      l=" << l << " p=" << p << " bond=" << lBond[p] << " clamped=" << lClamped[p][0]  << " enleg=" << enleg << " exleg=" << exleg<< " vtx: " << lVtx[p] << " -> "; 
 
             // Modify the vertex id
             lVtx[p] = FlipVertex(lVtx[p], enleg, exleg);
-            if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
-               cout << endl << "ERROR: non-allowed vertex is encountered" << endl;
-               exit(0);
-            }
+
             if (ldebug){
                 cout << lVtx[p] << endl << "      RN=" << accP << " Switch P: ";
                 for (int i=0; i!=8; i++)
@@ -652,6 +689,10 @@ int TFIM::OffDiagonalMove()
                 cout << endl;
             }
 
+            if ((lVtx[p] == 3) or (lVtx[p] == 5) or (lVtx[p] == 10) or (lVtx[p] == 12)){
+               cout << endl << "ERROR: non-allowed vertex is encountered" << endl;
+               exit(0);
+            }
            // Gather loop  statistics;
             if (exleg != enleg) nFlippedLegs += 2;
             else                nBounces     += 1; 
@@ -659,6 +700,42 @@ int TFIM::OffDiagonalMove()
     } 
     return 0;
 }
+
+
+/******************************************************************************
+* Map the updated state of vertices back to spins-operators state 
+******************************************************************************/
+void TFIM::MapStateBack()
+{
+    int p   = -1;     //non null operator index
+    int leg = -1;     //leg index
+    // Map back the vertices state to the operators state
+    for (auto oper=lOper.begin(); oper!=lOper.end(); oper++){
+        if (oper->type != 2){
+           p++;                                         
+           oper->type = VertexToOperator(lVtx[p]);
+        } 
+    }
+    //cout << "    Map spins state back " << endl;
+    // Map back the spins state     
+    for (long i=0; i!=Nspins; i++){
+        // Try to flip the spin if it is not acted by an operator nor is clamped
+        if  (lFirst[i]==-1){ 
+             if (not spins.isClamped(i))
+                if (uRand()<0.5) spins.flip(i);
+        }                                    
+        else{        
+            // Get the coordinates of the first leg over this site            
+            p   = (long) lFirst[i]/4; 
+            leg = lFirst[i]%4;
+            //cout << "Spin " << i << " Bond: " << p << " leg: " << leg << " vtx: " << lVtx[p] << " leg spin: " << LegSpin[lVtx[p]-1][leg] << endl;
+            spins.setSpin(i, getLeg(lVtx[p], leg));
+        }
+    }
+    //cout << "    Map spins state back. " << endl;
+}
+
+
 
 /******************************************************************************
 * Print vector of integers

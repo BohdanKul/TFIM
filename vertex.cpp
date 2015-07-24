@@ -144,6 +144,14 @@ void getVertices(const float& _J12, const float& _h1, const float& _h2, const fl
 }
 
 //*****************************************************************************
+// Get vertex type based on its legs
+//*****************************************************************************
+int getVertexID(int s0, int s1, int s2, int s3){
+    return (s0 + 1)*4 + (s1+1)*2 + (s2+1) + (s3+1)/2;
+}
+
+
+//*****************************************************************************
 // Get vertex type based on its lower layer spins and the operator type
 //*****************************************************************************
 int getVertexID(int s0, int s1, int otype){
@@ -160,7 +168,7 @@ int getVertexID(int s0, int s1, int otype){
        s3 = -(otype*2 + 1) * s0;
        s2 =  (otype*2 + 1) * s1;
     }
-    return (s0 + 1)*4 + (s1+1)*2 + (s2+1) + (s3+1)/2;
+    return getVertexID(s0, s1, s2, s3); 
 }
 
 //*****************************************************************************

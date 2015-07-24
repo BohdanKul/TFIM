@@ -110,16 +110,29 @@ array<float, 8> noBounceSolutionB(const array<float,8>& Ws, const int& enLeg){
 // Compute cumulative probability of exiting on one of 8 possible legs 
 // on leg-switch move during the off-diagonal update 
 //*****************************************************************************
-int getSwitchLegP(const int& enleg, int vtype, array<float, 16>& VWeights, array<float,8>& prob){
+int getSwitchLegP(const int& enleg, int vtype, array<bool,4>& clamped, array<float, 16>& VWeights, array<float,8>& prob){
    
     bool sdebug = false;
+    prob = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
 
     //cout << endl << "     getSwitchLegP: leg-"<< enleg << " vertex-"<< vtype << endl;
-    if (VWeights[vtype] == 0.0){ 
-        prob = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-        return 1;
+    if (VWeights[vtype] == 0.0)
+        return -1;
+    
+
+    // If all legs are clamped, the vertex cannot be changed 
+    bool allClamped = true;
+    for (int i=0; i!=4; i++)
+        if (clamped[i]==false) allClamped = false;
+    if (allClamped) {
+        prob = {0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0};
+        return -2;
     }
+
+    // If the entrance leg is clamped, the leg cannot be flipped
+    if ( (enleg<4) and clamped[enleg])
+        return -3;
 
     float totalW = 0;  // sum of all vertex weigths 
 
@@ -131,7 +144,8 @@ int getSwitchLegP(const int& enleg, int vtype, array<float, 16>& VWeights, array
     int ovtype = vtype; 
 
     // Flip or not the entrance leg 
-    if (enleg<4)   vtype = flipLeg(vtype, enleg);  
+    if (enleg<4)   
+        vtype = flipLeg(vtype, enleg);  
 
     // First add vertices with no change of the exit leg
     if (sdebug) cout << "      Legs' vertices: ";
@@ -144,10 +158,16 @@ int getSwitchLegP(const int& enleg, int vtype, array<float, 16>& VWeights, array
     // Continue with vertices having the exit leg flipped
     int ntype;
     for (auto ileg = 0; ileg != 4; ileg++){
-        ntype = flipLeg(vtype, ileg); 
-        Ws[ileg] = VWeights[ntype];
-        totalW  += VWeights[ntype];
-        if (sdebug) cout << ntype << " ";
+        if (not clamped[ileg]){
+            ntype = flipLeg(vtype, ileg); 
+            Ws[ileg] = VWeights[ntype];
+            totalW  += VWeights[ntype];
+            if (sdebug) cout << ntype << " ";
+        }
+        else{
+            Ws[ileg] = 0.0;
+            if (sdebug) cout << " clamp ";
+            }
     }
     
     if (sdebug){ 

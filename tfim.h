@@ -56,7 +56,12 @@ class TFIM: public RandomBase
         vector<array<float,  4>> dWeights;     // weigths of diagonal vertices at each bond
  
         // Assististing datastructures in the -offdiagonal update
-        vector<array<array<float,8>, 16*8>> VProb; // probability of exiting at a vertex leg
+        vector<array<
+                    array<
+                         array<float,8>, 
+                     16*8>, 
+                  16>
+              > VProb; // probability of exiting at a vertex leg
         // Accumulate measurements for averaging 
         void Accumulate(long from,  long& to);
         void Accumulate(float from, float& to);
@@ -75,6 +80,7 @@ class TFIM: public RandomBase
         vector<int>       lLast;     // for a particular spin site
         vector<int>       lLinks;    // linked vertex list
         vector<int>       lBond;     // bonds associated with vertices
+        vector<array<bool,5>> lClamped;
 
         int LegSpin[8][4];  // vertex types to spin states map
         //Spins   ap;       // propagated in imagenary time spins object
