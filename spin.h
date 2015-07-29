@@ -19,7 +19,7 @@ class Spins
         void setSpin(int index, int val);  // set the spin state
         void flip(int index);              // flip spin
         void print();                      // print out the spins state
-    
+        vector<int>* getState(){ return &spins;}; 
         //Spins operator=(const Spins& clone)
         //    {Nsites = clone.Nsites; spins = clone.spins; return *this;};
 

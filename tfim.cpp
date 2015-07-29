@@ -27,8 +27,9 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, vector<float>* _xfield,
     ID = communicator.getId();
     
     // Set up measurement variables
-    bMperSite = false;
-    bM        = true;
+    bMperSite    = false;
+    bM           = true;
+    bSlicesState = true;
     aMperSite.resize(Nsites,0);
     tMperSite.resize(Nsites,0);
     an    = 0;
@@ -128,6 +129,8 @@ int TFIM::DiagonalMove()
         tMperSite.assign(Nsites,0); 
         nlast = 0;
     }
+    if ((bSlicesState) and (nMeas==(binSize-1)))
+       SlicesState.clear();
 
     if (ldebug){
         cout << "---Diagonal Update" << endl;
@@ -202,6 +205,8 @@ int TFIM::DiagonalMove()
 
         // If it is a diagonal operator, try to remove it
         else if ((oper->type == 0) or (oper->type == 1)){
+            
+    
             // Compute the probability of the removal process
             AccP = (float)(M-n+1)/(beta*ham.getEtotal());
             if (ldebug)
@@ -215,6 +220,7 @@ int TFIM::DiagonalMove()
         // However the propagated spins state need to be modified.
         else{
             ap.flip(oper->index);
+            
             if (ldebug){
                 cout << "   offd: " << oper->index << endl;
                 ap.print();
@@ -228,6 +234,8 @@ int TFIM::DiagonalMove()
                 nlast = 0;
             }
         }
+        if ((bSlicesState) and (nMeas==(binSize-1)))
+           SlicesState.push_back(*(ap.getState()));
     }
     // Accumulate magnetization measurements
     if (bMperSite){
@@ -267,7 +275,7 @@ void TFIM::Measure()
         temp += ham.spins.getSpin(i);
     }
     aTM += pow((float)(temp)/(float)(Nsites),2);
-    // One sufficient number of measurements are taken, record their average
+    // Once sufficient number of measurements are taken, record their average
     if (nMeas == binSize){
 
         // Record operators list length and average energy per site
@@ -288,6 +296,15 @@ void TFIM::Measure()
                 *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aMperSite[j]/(1.0*binSize)));
                 //cout << aMperSite[j]/(1.0*binSize) << " ";
             }
+
+        if (bSlicesState){
+            cout << "   Full spin state: " << endl << "   ";
+            for (int i=0; i!=SlicesState.size(); i++){
+                for (int j=0; j!=Nsites; j++)
+                    cout << SlicesState[i][j] << " ";
+                cout << endl << "   ";
+             }    
+        }
         //cout << endl;
         *communicator.stream("estimator") << endl;    
         

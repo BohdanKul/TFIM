@@ -72,6 +72,7 @@ class TFIM: public RandomBase
         vector<int>       lLast;     // for a particular spin site
         vector<int>       lLinks;    // linked vertex list
         vector<int>       lMarked;   // marked legs in a cluster update
+        vector<vector<int>> SlicesState;
 
 
         int LegSpin[8][4];  // vertex types to spin states map
@@ -88,8 +89,10 @@ class TFIM: public RandomBase
 
         // Flags to measure a particular estimator
         bool bMperSite; 
+        bool bSlicesState;
         bool bM;
-        
+       
+
         Communicator communicator;  // output files management
         long ID;
         long binSize;
