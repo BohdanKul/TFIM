@@ -33,27 +33,6 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
     vector<int>  solTypes;
     array<float, 16> VWeights;         // vertex weigths for each bond
     
-    // All possible combinations of clamped legs on a vertex
-    //array<array<int>, 16> clampedLegs = {{
-    //                                      {false, false, false, false},
-    //                                      {false, false, false, true },
-    //                                      {false, false, true,  false},
-    //                                      {false, false, true,  true },
-    //                                      {false, true,  false, false},
-    //                                      {false, true,  false, true },
-    //                                      {false, true,  true,  false},
-    //                                      {false, true,  true,  true },
-    //                                      {true,  false, false, false},
-    //                                      {true,  false, false, true },
-    //                                      {true,  false, true,  false},
-    //                                      {true,  false, true,  true },
-    //                                      {true,  true,  false, false},
-    //                                      {true,  true,  false, true },
-    //                                      {true,  true,  true,  false},
-    //                                      {true,  true,  true,  true }
-    //                                    }};
-
-    
     int l0; int l1; int l2; int l3;
     array<bool, 4> clampedLegs;
     // For each bond
@@ -66,7 +45,7 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
         dWeights.push_back(initD);
 
         // Unpack bond interactions
-        J12 = _bonds->getBond(ibond)->getStrength();
+        J12   = _bonds->getBond(ibond)->getStrength();
         
         siteA = _bonds->getBond(ibond)->getSiteA();
         siteB = _bonds->getBond(ibond)->getSiteB();
@@ -240,26 +219,29 @@ int TFIM::DiagonalMove()
     int   vtype;        // vertex type
     Spins ap = spins;   // propagated in imagenary time spins state
     int s0;   int s1;   // two spins state  
-    int is0;  int is1;  // two spins indiced 
+    int is0;  int is1;  // two spins indices 
     
-    bool binsert;         // flag indicating the state of an operator insertation 
+    bool binsert;        // flag indicating the state of an operator insertation 
+    long ioper = 0;      // counter of non-null operators in the list
 
     bool ldebug = false;
     if (debug)  ldebug = true;
-    
-    
-    vector<int> SliceVertices; // list of compatible diagonal vertices for the zero's slice 
-    float SliceWeight = 0;            // the total weight of those vertices.
-    
-    // Compute them
-    for (auto b=0; b!=Nbonds; b++){
-        is0 = bonds.getBond(b)->getSiteA();
-        is1 = bonds.getBond(b)->getSiteB();
-        s0 = ap.getSpin(is0);
-        s1 = ap.getSpin(is1); 
-        SliceVertices.push_back(getCompatibleDiagVertex(s0, s1));
-        SliceWeight += dWeights[b][SliceVertices[b]];
-    }
+   
+    vector<vector<long>> worldLines;  
+    worldLines.resize(Nspins);
+
+    //vector<int> SliceVertices; // list of compatible diagonal vertices for the zero's slice 
+    //float SliceWeight = 0;     // the total weight of those vertices.
+    //
+    //// Compute it
+    //for (auto b=0; b!=Nbonds; b++){
+    //    is0 = bonds.getBond(b)->getSiteA();
+    //    is1 = bonds.getBond(b)->getSiteB();
+    //    s0 = ap.getSpin(is0);
+    //    s1 = ap.getSpin(is1); 
+    //    SliceVertices.push_back(getCompatibleDiagVertex(s0, s1));
+    //    SliceWeight += dWeights[b][SliceVertices[b]];
+    //}
 
     if (ldebug){
        cout << "---Diagonal move" << endl;
@@ -268,10 +250,10 @@ int TFIM::DiagonalMove()
           cout << spins.getSpin(i) << " ";
        cout << endl;
 
-       cout << "   Allowed vertices: total weight=" << SliceWeight << endl << "   ";
-       for (int i=0; i!=Nbonds; i++)
-           cout << SliceVertices[i] << " ";
-       cout << endl;
+       //cout << "   Allowed vertices: total weight=" << SliceWeight << endl << "   ";
+       //for (int i=0; i!=Nbonds; i++)
+       //    cout << SliceVertices[i] << " ";
+       //cout << endl;
 
        printOperators();
     }
@@ -305,6 +287,8 @@ int TFIM::DiagonalMove()
                        binsert = true;
                     }
                 //} while( !binsert );
+                
+                if (binsert) ioper += 1;
 
                 // If there are too many non null operators in the list, return an error code
                 if ((float)(M)/(float)(n)<1.25){     
@@ -321,31 +305,75 @@ int TFIM::DiagonalMove()
                 oper->set(2);
                 n--;
             }
+            else{
+                ioper += 1;
+            }
         }
         // Otherwise it must be an off-diagonal operator. It is left as it is.
         // However the propagated spins state need to be modified.
         else{
+            
             // Get coordinates of the effected spins
             is0 = bonds.getBond(oper->index)->getSiteA(); 
             is1 = bonds.getBond(oper->index)->getSiteB(); 
 
+            ioper += 1;
+            
             // Update the propagated spins state
-            if (oper->type == 0 ) ap.flip(is0); 
-            else                  ap.flip(is1); 
-       
+            if (oper->type == 0 ){
+                ap.flip(is0); 
+                worldLines[is0].push_back(ioper);
+            }
+            else{
+                ap.flip(is1); 
+                worldLines[is1].push_back(ioper);
+            } 
             // Get spins' state
             s0 = ap.getSpin(is0);
             s1 = ap.getSpin(is1);
 
             // Update the list of compatible vertices at the updated slice and their total weight
-            SliceWeight -= dWeights[oper->index][SliceVertices[oper->index]];
-            SliceVertices[oper->index] = getCompatibleDiagVertex(s0, s1);
-            SliceWeight += dWeights[oper->index][SliceVertices[oper->index]];
+            //SliceWeight -= dWeights[oper->index][SliceVertices[oper->index]];
+            //SliceVertices[oper->index] = getCompatibleDiagVertex(s0, s1);
+            //SliceWeight += dWeights[oper->index][SliceVertices[oper->index]];
         }
     }
     if (ldebug) printOperators();
     return 0;
 }
+
+vector<long> Sxs;
+Sxs.resize(Nspins);
+for (auto ispin=0; ispin!=Nspins; ispin++){
+    Sxs[ispin] = worldLines[ispin].size(); 
+}
+
+vector<long> Szs;
+Szs.resize(Nspins);
+
+vector<long>* wl;
+for (auto ispin=0; ispin!=Nspins; ispin++){
+    wl = &(worldLines[ispin]);
+    if ((wl->size()==0) or (wl->at(-1) != n))
+        wl->push_back(n);
+    Szs[ispin] = wl->at(0);
+    for (auto fSlice=1; fSlice!=wl->size(); fSlice++){
+        Szs[ispin] += (wl->at(fSlice) - wl->at(fSlice-1))*pow(-1,fSlice);      
+    }
+    Szs[ispin] *= spins.getSpin(ispin);
+}
+
+int  s0; int  s1;
+int is0; int is1;
+vector<long> Js;
+Js.resize(Nbonds);
+for (auto ibond=0; ibond!=Nbonds; ibond++){
+    is0 = bonds->getBond(ibond)->getSiteA();
+    is1 = bonds->getBond(ibond)->getSiteB();
+    s0  = spins.getSpin(is0);
+    s1  = spins.getSpin(is1);
+}
+
 
 /**************************************************************
 * Increase length of the operator list 
