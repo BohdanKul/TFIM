@@ -1,6 +1,4 @@
 #include "estimator.h"
-#include "spin.cpp"
-#include "bond.cpp"
 
 /*****************************************************************************
  * Compute the dot product of a vector of +/- 1's with a shifted copy of itself.
@@ -113,6 +111,10 @@ Estimator::Estimator(Spins* const _spins, Bonds* const _bonds){
     aSxs.resize(Nspins,0);
     aSzSzs.resize(Nbonds,0);
 
+    aSzs_0slice.resize(Nspins,0);
+    aSxs_0slice.resize(Nspins,0);
+    aSzSzs_0slice.resize(Nbonds,0);
+
     Iheader = "";  // header for interactions
     Zheader = "";  // header for z-field
     Xheader = "";  // header for x-field
@@ -122,18 +124,41 @@ Estimator::Estimator(Spins* const _spins, Bonds* const _bonds){
     for (auto ibond=0; ibond!=Nbonds; ibond++){
         is0 = bonds->getBond(ibond)->getSiteA();
         is1 = bonds->getBond(ibond)->getSiteB();
-        if (ibond==0) Iheader += boost::str(boost::format("#(%4d,%4d)    ")%is0%is1); 
-        else          Iheader += boost::str(boost::format(" (%4d,%4d)    ")%is0%is1); 
+        Iheader += boost::str(boost::format("%12s%-4d")%"Z_Z"%ibond); 
+        //Iheader += boost::str(boost::format("  Z_Z(%4d,%4d)")%is0%is1); 
+        //if (ibond==0) Iheader += boost::str(boost::format("#%3s (%4d,%4d)")%"Z_Z"%is0%is1); 
+        //else          Iheader += boost::str(boost::format( "%4s (%4d,%4d)")%"Z_Z"%is0%is1); 
     }
 
     // create headers for the fields
     for (auto i=0; i!=Nspins; i++){
-        if (i==0) Zheader += boost::str(boost::format("#%4d           ")%i); 
-        else      Zheader += boost::str(boost::format(" %4d           ")%i); 
+        Zheader += boost::str(boost::format("%12s%-4d")%"Z"%i); 
+        //Zheader += boost::str(boost::format("%11s %-4d")%"Z"%i); 
+        //if (i==0) Zheader += boost::str(boost::format("#Z %4d         ")%i); 
+        //else      Zheader += boost::str(boost::format(" Z %4d         ")%i); 
     }
     
-    Xheader = Zheader;
-}
+    for (auto i=0; i!=Nspins; i++){
+        Xheader += boost::str(boost::format("%12s%-4d")%"X"%i); 
+        //if (i==0) Xheader += boost::str(boost::format("#X %4d         ")%i); 
+        //else      Xheader += boost::str(boost::format(" X %4d         ")%i); 
+    }
+
+    
+    for (auto ibond=0; ibond!=Nbonds; ibond++){
+        is0 = bonds->getBond(ibond)->getSiteA();
+        is1 = bonds->getBond(ibond)->getSiteB();
+        Iheader0s += boost::str(boost::format("%12s%-4d")%"sZ_Z"%ibond); 
+    }
+
+    // create headers for the fields
+    for (auto i=0; i!=Nspins; i++){
+        Zheader0s += boost::str(boost::format("%12s%-4d")%"sZ"%i); 
+    }
+    
+    for (auto i=0; i!=Nspins; i++){
+        Xheader0s += boost::str(boost::format("%12s%-4d")%"sX"%i); 
+    }}
 
 /*****************************************************************************
 * Accumulate measurements
@@ -154,7 +179,7 @@ void Estimator::Accumulate(vector<vector<long>>& worldLines, long n){
         for (auto fSlice=1; fSlice!=wl->size(); fSlice++){
             spinT += (wl->at(fSlice) - wl->at(fSlice-1))*pow(-1,fSlice);      
         }
-        aSzs[ispin] += (1.0*spinT*spins->getSpin(ispin))/((float) n+1.0);
+        aSzs[ispin] += (1.0*spinT*spins->getSpin(ispin))/((float) n);
     }
 
     int  s0; int  s1;
@@ -164,7 +189,23 @@ void Estimator::Accumulate(vector<vector<long>>& worldLines, long n){
         is1 = bonds->getBond(ibond)->getSiteB();
         s0  = spins->getSpin(is0);
         s1  = spins->getSpin(is1);
-        aSzSzs[ibond] += (1.0*s0*s1*DotProduct(worldLines[is0], worldLines[is1]))/((float) n+1.0); 
+        aSzSzs[ibond] += (1.0*s0*s1*DotProduct(worldLines[is0], worldLines[is1]))/((float) n); 
+    }
+
+    for (auto ispin=0; ispin!=Nspins; ispin++){
+        if (worldLines[ispin][0]==1) aSxs_0slice[ispin] += n;
+    }
+    
+    for (auto ispin=0; ispin!=Nspins; ispin++){
+        aSzs_0slice[ispin] += spins->getSpin(ispin);
+    }
+
+    for (auto ibond=0; ibond!=Nbonds; ibond++){
+        is0 = bonds->getBond(ibond)->getSiteA();
+        is1 = bonds->getBond(ibond)->getSiteB();
+        s0  = spins->getSpin(is0);
+        s1  = spins->getSpin(is1);
+        aSzSzs_0slice[ibond] +=s0*s1;
     }
 }
 
@@ -177,6 +218,9 @@ void Estimator::Reset(){
     fill(aSxs.begin(),   aSxs.end(),   0);
     fill(aSzs.begin(),   aSzs.end(),   0);
     fill(aSzSzs.begin(), aSzSzs.end(), 0);
+    fill(aSxs_0slice.begin(),   aSxs_0slice.end(),   0);
+    fill(aSzs_0slice.begin(),   aSzs_0slice.end(),   0);
+    fill(aSzSzs_0slice.begin(), aSzSzs_0slice.end(), 0);
 }
 
 

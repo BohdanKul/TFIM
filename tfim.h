@@ -5,6 +5,7 @@
 #include <list>
 #include "communicator.h"
 #include "spin.h"
+#include "estimator.h"
 
 using namespace std;
 
@@ -106,5 +107,8 @@ class TFIM: public RandomBase
         long ID;
         long binSize;
         bool debug;
+        
+        Estimator estimator;
+        vector<float>* xfield;
 };
 #endif

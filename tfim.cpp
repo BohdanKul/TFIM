@@ -2,23 +2,27 @@
 #include <string.h>
 #include <math.h>
 #include <cmath>
-#include "tfim.h"
+#include <iomanip>
 #include <algorithm>    // lower_bound
+
+#include "tfim.h"
+
 #include "vertex.cpp"
 #include "directedloop.cpp"
-#include <iomanip>
 
 TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, 
            vector<float>* _xfield, vector<float>* _zfield,
            long _seed, float _beta, long _binSize):
     RandomBase(_seed),  // initialize ancestor
     communicator(_bonds, _beta,  _seed), 
-    spins(*_spins), bonds(*_bonds)
+    spins(*_spins), bonds(*_bonds),
+    estimator(_spins, _bonds)
 {
     // Set up physical variables
     beta   = _beta;
     Nspins = spins.getSize();
     Nbonds = bonds.getBondsN();
+    xfield = _xfield;
 
     float  J12;
     float  h1; float h2;
@@ -53,10 +57,17 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
         nA    = _bonds->countNeighbors(siteA);
         nB    = _bonds->countNeighbors(siteB);
 
-        h1  = _zfield->at(siteA)/(1.0*nA);
-        h2  = _zfield->at(siteB)/(1.0*nB);
-        d1  = _xfield->at(siteA)/(1.0*nA);
-        d2  = _xfield->at(siteB)/(1.0*nB);
+        h1 = 0; h2 = 0;
+        if (not _zfield->empty()){
+            h1  = _zfield->at(siteA)/(1.0*nA);
+            h2  = _zfield->at(siteB)/(1.0*nB);
+        }
+
+        d1 = 0; d2 = 0;
+        if (not _xfield->empty()){
+            d1  = _xfield->at(siteA)/(1.0*nA);
+            d2  = _xfield->at(siteB)/(1.0*nB);
+        }
 
         cout << "   A: " << siteA << " B: " << siteB << " J: " << J12 << "; h: (" << h1 << ", " << h2 << "); d: (" << d1 << ", " << d2 << "); Z: (" << nA << ", " << nB <<")" << endl;
 
@@ -173,7 +184,20 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
         for (int j=0; j!=Nspins; j++)
             eHeader += boost::str(boost::format("%12s%4i") %"M"%j);
 
-    *communicator.stream("estimator")<< eHeader << endl;    
+    *communicator.stream("estimator")<< eHeader; 
+
+    // complete it with the headers for local averages and correlators
+    *communicator.stream("estimator")<< estimator.Xheader 
+                                     << estimator.Zheader
+                                     << estimator.Iheader
+                                     << estimator.Xheader0s 
+                                     << estimator.Zheader0s
+                                     << estimator.Iheader0s
+                                     << endl;    
+    cout << estimator.Xheader 
+         << estimator.Zheader
+         << estimator.Iheader
+         << endl;    
 
 }
 
@@ -227,8 +251,8 @@ int TFIM::DiagonalMove()
     bool ldebug = false;
     if (debug)  ldebug = true;
    
-    vector<vector<long>> worldLines;  
-    worldLines.resize(Nspins);
+    vector<vector<long>> worldLines;  // kinks in the spin worldlines caused
+    worldLines.resize(Nspins);        // by off-diagonal operator sigma_x  
 
     //vector<int> SliceVertices; // list of compatible diagonal vertices for the zero's slice 
     //float SliceWeight = 0;     // the total weight of those vertices.
@@ -338,41 +362,13 @@ int TFIM::DiagonalMove()
             //SliceWeight += dWeights[oper->index][SliceVertices[oper->index]];
         }
     }
+    estimator.Accumulate(worldLines, n);
+
     if (ldebug) printOperators();
     return 0;
 }
 
-vector<long> Sxs;
-Sxs.resize(Nspins);
-for (auto ispin=0; ispin!=Nspins; ispin++){
-    Sxs[ispin] = worldLines[ispin].size(); 
-}
 
-vector<long> Szs;
-Szs.resize(Nspins);
-
-vector<long>* wl;
-for (auto ispin=0; ispin!=Nspins; ispin++){
-    wl = &(worldLines[ispin]);
-    if ((wl->size()==0) or (wl->at(-1) != n))
-        wl->push_back(n);
-    Szs[ispin] = wl->at(0);
-    for (auto fSlice=1; fSlice!=wl->size(); fSlice++){
-        Szs[ispin] += (wl->at(fSlice) - wl->at(fSlice-1))*pow(-1,fSlice);      
-    }
-    Szs[ispin] *= spins.getSpin(ispin);
-}
-
-int  s0; int  s1;
-int is0; int is1;
-vector<long> Js;
-Js.resize(Nbonds);
-for (auto ibond=0; ibond!=Nbonds; ibond++){
-    is0 = bonds->getBond(ibond)->getSiteA();
-    is1 = bonds->getBond(ibond)->getSiteB();
-    s0  = spins.getSpin(is0);
-    s1  = spins.getSpin(is1);
-}
 
 
 /**************************************************************
@@ -448,11 +444,44 @@ void TFIM::Measure()
                 *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aMperSite[j]/(1.0*binSize)));
                 //cout << aMperSite[j]/(1.0*binSize) << " ";
             }
+        
+        // Record local expectation values and spin-spin correlation functions
+        int i=0;
+        for (auto &Sx: *(estimator.getSxs())){
+             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
+             i++;
+        } 
+        
+        for (auto &Sz: *(estimator.getSzs())){
+            *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(Sz/(1.0*estimator.getCount())));
+        } 
+       
+        for (auto &SzSz: *(estimator.getSzSzs())){
+            *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(SzSz/(1.0*estimator.getCount())));
+        } 
+       
+        // Record local expectation values and spin-spin correlation functions for the first slice only
+        i=0;
+        for (auto &Sx: *(estimator.getSxs0s())){
+             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
+             i++;
+        } 
+        
+        for (auto &Sz: *(estimator.getSzs0s())){
+            *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(Sz/(1.0*estimator.getCount())));
+        } 
+       
+        for (auto &SzSz: *(estimator.getSzSzs0s())){
+            *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(SzSz/(1.0*estimator.getCount())));
+        } 
+ 
         //cout << endl;
         *communicator.stream("estimator") << endl;    
         
         // Reset measurement variables to 0
         resetMeas();
+        estimator.Reset();
+        
         cout << ID << ": Measurement taken" << endl;
     }
 }
