@@ -9,6 +9,7 @@
 
 #include "vertex.cpp"
 #include "directedloop.cpp"
+#include "estimator.cpp"
 
 TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, 
            vector<float>* _xfield, vector<float>* _zfield,
