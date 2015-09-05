@@ -179,7 +179,7 @@ void Estimator::Accumulate(vector<vector<long>>& worldLines, long n){
         for (auto fSlice=1; fSlice!=wl->size(); fSlice++){
             spinT += (wl->at(fSlice) - wl->at(fSlice-1))*pow(-1,fSlice);      
         }
-        aSzs[ispin] += (1.0*spinT*spins->getSpin(ispin))/((float) n);
+        aSzs[ispin] += (1.0*spinT*spins->getSpin(ispin)+1.0*(spins->getSpin(ispin)))/((float) n+1.0);
     }
 
     int  s0; int  s1;

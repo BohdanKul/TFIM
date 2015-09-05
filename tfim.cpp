@@ -449,7 +449,7 @@ void TFIM::Measure()
         // Record local expectation values and spin-spin correlation functions
         int i=0;
         for (auto &Sx: *(estimator.getSxs())){
-             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
+             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(-1.0*Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
              i++;
         } 
         
@@ -464,7 +464,7 @@ void TFIM::Measure()
         // Record local expectation values and spin-spin correlation functions for the first slice only
         i=0;
         for (auto &Sx: *(estimator.getSxs0s())){
-             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
+             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(-1.0*Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
              i++;
         } 
         
