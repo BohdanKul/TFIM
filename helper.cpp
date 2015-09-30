@@ -1,6 +1,5 @@
-#ifndef HELPER_CPP
-#define HELPER_CPP
- 
+#include "helper.h"
+
 using namespace std;
 
 //*****************************************************************************
@@ -39,4 +38,3 @@ array<int,8> sort_indexes(const array<float, 8> &v) {
 
   return idx;
 }
-#endif

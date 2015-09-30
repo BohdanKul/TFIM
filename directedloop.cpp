@@ -1,10 +1,4 @@
-// lower_bound/upper_bound example
-#include <iostream>     // std::cout
-#include <algorithm>    // std::lower_bound, std::upper_bound, std::sort
-#include <vector>       // std::vector
-#include <array>
-#include <cmath>
-#include "helper.cpp"   // flipBit() and sort_indexes()
+#include "directedloop.h"
 
 using namespace std;
 //*****************************************************************************

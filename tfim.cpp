@@ -1,15 +1,4 @@
-#include <stdlib.h> 
-#include <string.h>
-#include <math.h>
-#include <cmath>
-#include <iomanip>
-#include <algorithm>    // lower_bound
-
 #include "tfim.h"
-
-#include "vertex.cpp"
-#include "directedloop.cpp"
-#include "estimator.cpp"
 
 TFIM::TFIM(Spins* const _spins, Bonds* const _bonds, 
            vector<float>* _xfield, vector<float>* _zfield,
@@ -368,9 +357,6 @@ int TFIM::DiagonalMove()
     if (ldebug) printOperators();
     return 0;
 }
-
-
-
 
 /**************************************************************
 * Increase length of the operator list 

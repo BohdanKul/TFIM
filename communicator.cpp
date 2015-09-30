@@ -1,7 +1,4 @@
-#include <iostream>
-#include <fstream>
 #include "communicator.h"
-#include <time.h>
 
 using namespace std;
 //using boost::lexical_cast;

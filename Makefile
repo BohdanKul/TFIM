@@ -1,7 +1,7 @@
 CC=g++
 CFLAGS=-c -o3 -std=c++0x -fPIC
 LDFLAGS=-L. -lboost_program_options -lboost_filesystem -lboost_system
-SOURCES=main.cpp tfim.cpp randombase.cpp communicator.cpp hamiltonian.cpp bond.cpp spin.cpp
+SOURCES=main.cpp tfim.cpp communicator.cpp bond.cpp spin.cpp directedloop.cpp vertex.cpp helper.cpp randombase.cpp 
 OBJECTS=$(SOURCES:.cpp=.o)
 EXECUTABLE=main.e
 

@@ -4,7 +4,8 @@
 #include <vector>       // std::vector
 #include <array>
 #include <cmath>
-#include "helper.cpp"
+#include "vertex.h"
+
 using namespace std;
 
 
@@ -183,6 +184,8 @@ int VertexToOperator(int vertexID){
         if (l2!=l1) return -1;
         else        return  0;
     }        
+    
+    return 100;
 }
 
 

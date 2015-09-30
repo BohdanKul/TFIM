@@ -1,10 +1,15 @@
 #ifndef COMMUNICATOR_H
 #define COMMUNICATOR_H
 
-#include <fstream>
-#include <unordered_map>
 #include <boost/format.hpp>
 #include <boost/filesystem.hpp>
+
+#include <fstream>
+#include <iostream>
+#include <fstream>
+#include <unordered_map>
+#include <time.h>
+
 #include "bond.h"
 
 using namespace std;

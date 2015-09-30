@@ -1,11 +1,23 @@
 #ifndef TFIM_H
 #define TFIM_H
 
-#include <stack>
 #include <list>
+#include <stack>
+#include <cmath>
+#include <iomanip>
+#include <algorithm>    // lower_bound
+
+#include <stdlib.h> 
+#include <string.h>
+#include <math.h>
+
+#include "randombase.h"
 #include "communicator.h"
 #include "spin.h"
 #include "estimator.h"
+#include "bond.h"
+#include "vertex.h"
+#include "directedloop.h"
 
 using namespace std;
 
