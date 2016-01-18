@@ -1,7 +1,7 @@
 import pylab    as py
 import numpy    as np
 import numpy.ma as ma
-import kevent, argparse, tfim, MCstat, Hbuilder
+import kevent, argparse, tfim, MCstat, Hbuilder, Hfile
 
 #------------------------------------------------------------------------------
 # Inversly-proportional annealing schedule.
@@ -42,17 +42,22 @@ def detTotalBins(errs, weights, r, bins):
         estimate is obtained with the help of Lagrange multipliers 
         method. The function to minize is sum(bins/r2s) that is the estimate
         of the total number of bins. '''
+    print 'bins:    ', bins
+    print 'weights: ', weights
+    print 'errors:  ', errs
+    print 'r:       ', r
     bins = np.transpose(np.atleast_2d(np.array(bins)))           # convert vector to column-shaped
     iLambda = np.sum((errs*errs*r*r*weights*weights),   axis=0)  # compute Lagrange multiplier
-    iLambda/= np.sum((errs*weights*(np.sqrt(bins)), axis=0) 
-    r2s     = np.sqrt(bins)/(weights*errs)*iLambda               
+    iLambda/= np.sum(errs*np.abs(weights)*(np.sqrt(bins)), axis=0) 
+    r2s     = np.sqrt(bins)/(np.abs(weights)*errs)*iLambda               
     
-    
-    maxr2s = np.amin(rs, axis=1)    # find the smallest ones
+    print 'r2s:    ', r2s
+    maxr2s = np.amin(r2s, axis=1)    # find the smallest ones
+    print 'maxr2s: ', maxr2s
     # compute
-    tbins  = np.ceil(bins/maxr2s)
-
-    return np.transpose(np.atleast_2d(tbins)).tolist()
+    tbins  = np.ceil(np.transpose(np.atleast_2d(bins))/maxr2s)
+    print 'tbins: ', tbins
+    return np.squeeze(tbins).tolist()
 
 
 # ----------------------------------------------------------------------
@@ -83,10 +88,14 @@ def main():
     # Load data generating Hamiltonian ----------------------------------------
     beta = args['beta']
     Ns   = 0
+    (gHs, gDs, gJs, bonds) = (np.array([]), np.array([]), np.array([]), np.array([]))  
     if (args['inter'] is not None):
-        gHs, gDs, gJs, bonds = Hbuilder.LoadInters(args['inter'])
-        Ns = len(Hs)
-    
+        gHs, gDs, gJs, bonds = Hfile.LoadInters(args['inter'])
+        Ns = len(gHs)
+    else:
+        print "Error: enter interaction file"
+        return 1
+
     # Convert bonds datastructure to the one compatible with TFIM class
     t = []
     for l in bonds.tolist():
@@ -95,16 +104,19 @@ def main():
     Nb = len(bonds) 
     
     # Generate initial guess for the couplings---------------------------------
-    Hs = np.random.randn(Ns)*max([max(Hs),0.5])+Hs
-    Ds = np.random.randn(Ns)*max([max(Ds),0.5])+Ds
-    Js = np.random.randn(Nb)*max([max(Js),0.5])+Js
+    Hs = np.random.randn(Ns)*max([max(gHs),0.5])+gHs
+    Ds = np.abs(np.random.randn(Ns)*max([max(gDs),0.5]))+gDs
+    Js = np.random.randn(Nb)*max([max(gJs),0.5])+gJs
     
-    # Obtain or generate training dataset -------------------------------------
-    data, weights = Hbuilder.GetData(args['data'], Ns, args['seed'], 10000, bonds, gHs, gDs, gJs, beta) 
+    # Obtain or generate a training dataset -----------------------------------
+    data, weights = Hfile.GetData(args['data'], Ns, args['seed'], 10000, bonds, gHs, gDs, gJs, beta) 
+    data    = data[:2]
+    weights = weights[:2]
     data += [[]]          # add a vector with no bits clamped
-    weights.append(-beta) # and its weight
-    weights = weights.reshape((Ndata,1))  # take a transpose
     Nd = len(data)
+    weights = np.append(weights, -beta) # and its weight
+    weights = weights.reshape((Nd,1))  # take a transpose
+    #weights = np.transpose(np.atleast_2d(weights))# take a transpose
     
     # Set up MC constants------------------------------------------------------ 
     mSlice = 1025  # minimum number of bins to take in attempt to converge the autocorrelation
@@ -114,10 +126,11 @@ def main():
     a, b = IPschedule(0.9/beta, 0.1/beta, 200)
     Norm = 100.0 # gradient norm 
     step = 0     # step in gradient descent
-    eta
+    nsteps = 1000
 
     # the gradient
-    gval = np.zeros(len(Zs)+len(Xs)+len(ZZs)) 
+    gval = np.zeros(len(gHs)+len(gDs)+len(gJs)) 
+    subset = range(Nd)
 
     # Gradient descent --------------------------------------------------------
     while ((step < nsteps) and (Norm > 0.00001)):
@@ -126,20 +139,19 @@ def main():
         TFIMs = []                      # list of MC objects, one for each data vector
         (Zs,   Xs,  ZZs) = ([], [], []) # lists of raw measurements for each data vector
         for vector in data:
-            TFIMS.append(tfim.TFIM(vector, bonds, Hs.tolist(), Ds.tolist(), Js.tolist(), Ns,beta, 1))
+            TFIMs.append(tfim.TFIM(vector, bonds, Hs.tolist(), Ds.tolist(), Js.tolist(), Ns,beta, 1))
             Zs.append([]); Xs.append([]); ZZs.append([])
          
         # Reset necessary datastructures ------------------------------------------
-        (bins, mtargets) = ([0]*Nd, [mSlice]*Nd) # bins taken and total number of bins to take 
+        (bins, mtargets) = (np.zeros(Nd), mSlice*np.ones(Nd)) # bins taken and total number of bins to take 
         (aZs, aXs, aZZs) = (np.zeros((Nd, Ns)), np.zeros((Nd, Ns)), np.zeros((Nd, Nb)))  # estimators' averages
         (eZs, eXs, eZZs) = (np.zeros((Nd, Ns)), np.zeros((Nd, Ns)), np.zeros((Nd, Nb)))  # and errors   
         (isAutoCorr, isUncertain) = (True, True) # flags controlling simulation runtime
-        subset = range(Nd)  # subset of data required to run, initiated with all vectors in. 
 
         # run MC until the error is converged and is below the error tolerance level
         while isAutoCorr or isUncertain:
             # for each vector in dataset
-            for i in subset:
+            for i in range(Nd):
                 # run a pre-determined number of measurements
                 while (bins[i] < mtargets[i]):
                     for sweep in range(100):
@@ -155,38 +167,42 @@ def main():
                     # take a measurement with the help of auxilary variables
                     bins[i] += 1
                     (tZs, tXs, tZZs) = ([],[],[]) # reset auxilary variables 
-                    TFIM.Measure(tZs, tXs, tZZs)
+                    TFIMs[i].Measure(tZs, tXs, tZZs)
                     # accumulate them in lists
                     Zs[i].append(tZs); Xs[i].append(tXs); ZZs[i].append(tZZs)
                     
             # check whether the measurements are autocorrelated
             if  isAutoCorr: 
                 subset  = [i for i in subset if (checkAutoCorr(Zs[i]) or checkAutoCorr(Xs[i]) or checkAutoCorr(ZZs[i]))]
-                # assign more measurements to take to samples with high autocorrelation
-                mtargets[subset] += mSlice
                 isAutoCorr = len(subset) > 0
-                # if all samples are converged, reset the subset of samples to consider to the full set 
-                if not isAutoCorr: subset = range(Nd)
-
+                # assign more measurements to take for samples with high autocorrelation
+                if isAutoCorr: mtargets[np.array(subset)] += mSlice
+                # if all samples are converged, reset the subset of samples to the full set 
+                
             # start taking averages only when all chains have converged errors
             if  not isAutoCorr:
-                for i in subset:
+                for i in range(Nd):
                     ((aZs[i], eZs[i]), (aXs[i], eXs[i]), (aZZs[i], eZZs[i])) = (getStats(np.array(Zs[i])), getStats(np.array(Xs[i])), getStats(np.array(ZZs[i])))
-                # stack measurements for an easy treatement
-                aves = hstack(aZs, aXs, aZZs)
-                errs = hstack(eZs, eXs, eZZs)
+                # stack measurements for an easy manipulation
+                aves = np.hstack([aZs, aXs, aZZs])
+                errs = np.hstack([eZs, eXs, eZZs])
                 
                 # compute the gradient components averages and errors
                 gval = np.sum((aves*weights),  axis=0)
                 gerr = np.sqrt(np.sum((errs*errs*weights*weights), axis=0))
                 
-                # determine indices of the averages falling below the tolerance treshold 
-                indices = ma.getmask(ma.masked_where(gval*tol-gerr < 0))
-                
-                # if there are no such averages, set the flag to false
+                # determine the indices of averages falling below the tolerance treshold 
+                #indices = ma.getmask(ma.masked_where(gval*tol-gerr < 0, ))
+                print 'bins:    ', bins
+                print 'targets: ', mtargets 
+                print 'errors:  ', errs[errs<0]
+                indices = np.squeeze(np.where(gval*tol-gerr < 0))
+                # if there are no such averages, signal that the errors are within tolerance bounds
                 if len(indices) == 0: isUncertain = False
                 # otherwise, estimate how many more bins to take
-                else:                 mtargets[indices] = detTotalBins(errs[indices, :], weights[indices], (gval*tol/gerr)[indices], bins[indices])
+                else: mtargets = detTotalBins(errs[:, indices], weights, (np.abs(gval)*tol/gerr)[indices], bins)
+                
+                return 0
         # Destroy MC solvers -----------------------------------------------------
         for i in range(len(TFIMs)):
             del TFIMs[i]

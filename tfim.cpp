@@ -96,38 +96,39 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
                     solTypes.push_back(getSwitchLegP(enleg, vtype, clampedLegs, VWeights, VProb[ibond][iclamp][vtype*8+enleg]));
         }
     }
-
-    cout << endl <<  "=== Solutions to the directed loop equations ===" << endl;
-    float stopP;
-    float startP;
-    int iclamp = 15;
-    for (auto ibond=0; ibond!=1; ibond++){
-        cout << endl << "===Bond " << ibond << "=== " << endl;
-        for (auto vtype=0; vtype!=16; vtype++)
-            if (VWeights[vtype]!=0.0){
-                cout << "---Vertex " << vtype << ": " << endl;
-                for (auto enleg=0; enleg!=8; enleg++){
-                    cout << "   Leg " << enleg;
-                        if (solTypes[vtype*8+enleg]==0) cout << " (N-B): ";  // no-bounce solution
-                        if (solTypes[vtype*8+enleg]==1) cout << " (L-B): ";  // bounce from the largest weight solution
-                        if (solTypes[vtype*8+enleg]==2) cout << " (H-B): ";  // heat-bath bounce solution
-                    
-                    for (auto exleg=0; exleg!=8; exleg++)
-                        printf("%3.2f; ", VProb[ibond][iclamp][vtype*8+enleg][exleg]);
-                    
-                    if (enleg<4){
-                        if (VProb[ibond][iclamp][vtype*8+enleg][3] != -1.0) stopP = 1.0 - VProb[ibond][iclamp][vtype*8+enleg][3];
-                        else                                       stopP = 1.0;
-                        printf(" Stop  P: %3.2f \n", stopP);
-                    }
-                    else{
-                        if (VProb[ibond][iclamp][vtype*8+enleg][3] != -1.0) startP = VProb[ibond][iclamp][vtype*8+enleg][3];
-                        else                                       startP = 0.0;
-                        printf(" Start P: %3.2f \n", startP);
+    if (debug){
+        cout << endl <<  "=== Solutions to the directed loop equations ===" << endl;
+        float stopP;
+        float startP;
+        int iclamp = 15;
+        for (auto ibond=0; ibond!=1; ibond++){
+            cout << endl << "===Bond " << ibond << "=== " << endl;
+            for (auto vtype=0; vtype!=16; vtype++)
+                if (VWeights[vtype]!=0.0){
+                    cout << "---Vertex " << vtype << ": " << endl;
+                    for (auto enleg=0; enleg!=8; enleg++){
+                        cout << "   Leg " << enleg;
+                            if (solTypes[vtype*8+enleg]==0) cout << " (N-B): ";  // no-bounce solution
+                            if (solTypes[vtype*8+enleg]==1) cout << " (L-B): ";  // bounce from the largest weight solution
+                            if (solTypes[vtype*8+enleg]==2) cout << " (H-B): ";  // heat-bath bounce solution
+                        
+                        for (auto exleg=0; exleg!=8; exleg++)
+                            printf("%3.2f; ", VProb[ibond][iclamp][vtype*8+enleg][exleg]);
+                        
+                        if (enleg<4){
+                            if (VProb[ibond][iclamp][vtype*8+enleg][3] != -1.0) stopP = 1.0 - VProb[ibond][iclamp][vtype*8+enleg][3];
+                            else                                       stopP = 1.0;
+                            printf(" Stop  P: %3.2f \n", stopP);
+                        }
+                        else{
+                            if (VProb[ibond][iclamp][vtype*8+enleg][3] != -1.0) startP = VProb[ibond][iclamp][vtype*8+enleg][3];
+                            else                                       startP = 0.0;
+                            printf(" Start P: %3.2f \n", startP);
+                        }
                     }
                 }
-            }
-    } 
+        } 
+    }
     // Initialize algorithmic variables
     n = 0;
     M = round(((float) Nbonds)*beta*1.5);
@@ -398,79 +399,66 @@ bool TFIM::AdjustLoopsN()
 
 
 /******************************************************************************
-* Accumulate estimator measurements 
+*  
 ******************************************************************************/
-void TFIM::Measure()
+void TFIM::Record()
 {
-    nMeas += 1;
-    Accumulate(n, an);
 
-    long temp = 0;
-    for (int i=0; i!=Nspins; i++){
-        temp += spins.getSpin(i);
-    }
-    aTM += pow((float)(temp)/(float)(Nspins),2);
     // Once sufficient number of measurements are taken, record their average
-    if (nMeas == binSize){
 
-        // Record operators list length and average energy per site
-        *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(an/(1.0*binSize)));
+    // Record operators list length and average energy per site
+    *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(estimator.getAn()/(1.0*estimator.getCount())));
 
-        float EperSite = -(float)(an)/(float)( binSize*Nspins)/beta + tDiagOffset/(float)(Nspins);
-        *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %EperSite);
-       //cout << an/(1.0*binSize) << " " << EperSite << " "; 
+    float EperSite = -(float)(estimator.getAn())/(float)( estimator.getCount()*Nspins)/beta + tDiagOffset/(float)(Nspins);
+    *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %EperSite);
 
-        // Record the total magnetization
-        if (bM)
-            *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aTM/(1.0*binSize)));
+    // Record the total magnetization
+    if (bM)
+        *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aTM/(1.0*estimator.getCount())));
 
-        //cout << aTM/(1.0*binSize*Nspins) << " ";
-        // Record magnetization per site
-        if (bMperSite)
-            for (int j=0; j!=Nspins; j++){
-                *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aMperSite[j]/(1.0*binSize)));
-                //cout << aMperSite[j]/(1.0*binSize) << " ";
-            }
-        
-        // Record local expectation values and spin-spin correlation functions
-        int i=0;
-        for (auto &Sx: *(estimator.getSxs())){
-             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(-1.0*Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
-             i++;
-        } 
-        
-        for (auto &Sz: *(estimator.getSzs())){
-            *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(Sz/(1.0*estimator.getCount())));
-        } 
-       
-        for (auto &SzSz: *(estimator.getSzSzs())){
-            *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(SzSz/(1.0*estimator.getCount())));
-        } 
-       
-        // Record local expectation values and spin-spin correlation functions for the first slice only
-        i=0;
-        for (auto &Sx: *(estimator.getSxs0s())){
-             *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(-1.0*Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
-             i++;
-        } 
-        
-        for (auto &Sz: *(estimator.getSzs0s())){
-            *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(Sz/(1.0*estimator.getCount())));
-        } 
-       
-        for (auto &SzSz: *(estimator.getSzSzs0s())){
-            *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(SzSz/(1.0*estimator.getCount())));
-        } 
+    //cout << aTM/(1.0*binSize*Nspins) << " ";
+    // Record magnetization per site
+    if (bMperSite)
+        for (int j=0; j!=Nspins; j++){
+            *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(aMperSite[j]/(1.0*estimator.getCount())));
+            //cout << aMperSite[j]/(1.0*binSize) << " ";
+        }
+    
+    // Record local expectation values and spin-spin correlation functions
+    int i=0;
+    for (auto &Sx: *(estimator.getSxs())){
+         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(-1.0*Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
+         i++;
+    } 
+    
+    for (auto &Sz: *(estimator.getSzs())){
+        *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(Sz/(1.0*estimator.getCount())));
+    } 
+    
+    for (auto &SzSz: *(estimator.getSzSzs())){
+        *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(SzSz/(1.0*estimator.getCount())));
+    } 
+    
+    // Record local expectation values and spin-spin correlation functions for the first slice only
+    i=0;
+    for (auto &Sx: *(estimator.getSx0s())){
+         *communicator.stream("estimator") << boost::str(boost::format("%16.8E") %(-1.0*Sx/(1.0*estimator.getCount()*xfield->at(i)*beta)));
+         i++;
+    } 
+    
+    for (auto &Sz: *(estimator.getSz0s())){
+        *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(Sz/(1.0*estimator.getCount())));
+    } 
+    
+    for (auto &SzSz: *(estimator.getSzSz0s())){
+        *communicator.stream("estimator")  << boost::str(boost::format("%16.8E") %(SzSz/(1.0*estimator.getCount())));
+    } 
  
-        //cout << endl;
-        *communicator.stream("estimator") << endl;    
-        
-        // Reset measurement variables to 0
-        resetMeas();
-        estimator.Reset();
-        
-        cout << ID << ": Measurement taken" << endl;
-    }
+    //cout << endl;
+    *communicator.stream("estimator") << endl;    
+    
+    
+    cout << ID << ": Measurement taken" << endl;
 }
 
 /******************************************************************************
@@ -504,8 +492,9 @@ void TFIM::Measure(int sampleInd, double* aEnergy, double* aMagnetization)
 **************************************************************/
 void TFIM::resetMeas()
 {
-   nMeas = 0;
+   nMeas  = 0;
    an = 0;
+   estimator.Reset();
    if (bMperSite) aMperSite.assign(Nspins,0);
    if (bM)        aTM =0;
     nFlippedLegs = 0;   

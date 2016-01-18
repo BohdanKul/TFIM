@@ -317,7 +317,8 @@ int main(int argc, char *argv[])
     // Run the main loop 
     // ------------------------------------------------------------------------ 
     cout << endl << "=== Measurement stage ===" << endl << endl;
-    for (long i=0; i!=params["binsize"].as<long>()*params["meas"].as<long>(); i++){
+    long binSize = params["binsize"].as<long>();
+    for (long i=0; i!=binSize*params["meas"].as<long>(); i++){
         // Perform  a full MC sweep
         
         while (tfim.DiagonalMove()==1)               // diagonal update
@@ -326,7 +327,10 @@ int main(int argc, char *argv[])
         tfim.ConstructLinks();                       // linked list and vertex list construction 
         tfim.OffDiagonalMove();                      // cluster update
         tfim.MapStateBack();                         // mapping back the updated state 
-        tfim.Measure();
+        if ((i % binSize) == 0){ 
+            tfim.Record();
+            tfim.resetMeas();
+        }
     }
 
     delete spins;

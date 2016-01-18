@@ -15,15 +15,17 @@ class Estimator
         void Reset();    
         void print();
 
+        long           getAn(){return an;};
         vector<long>*  getSxs(){return &aSxs;}
         vector<float>* getSzs(){return &aSzs;}
         vector<float>* getSzSzs(){return &aSzSzs;}
 
-        vector<long>*  getSxs0s(){return &aSxs_0slice;}
-        vector<long>*  getSzs0s(){return &aSzs_0slice;}
-        vector<long>*  getSzSzs0s(){return &aSzSzs_0slice;}
+        vector<long>*  getSx0s(){return &aSxs_0slice;}
+        vector<long>*  getSz0s(){return &aSzs_0slice;}
+        vector<long>*  getSzSz0s(){return &aSzSzs_0slice;}
         
-        long&          getCount(){return counter;}
+        long&          getCount(){return counter;};
+        long           getNSpins(){return Nspins;};
 
         string Iheader;  // header for bonds 
         string Zheader;  // header for z-field
@@ -37,6 +39,7 @@ class Estimator
         long counter;
         int  Nspins;
         int  Nbonds;
+        long an;
         vector<long>  aSxs;
         vector<float> aSzs;
         vector<float> aSzSzs;

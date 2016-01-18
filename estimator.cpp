@@ -161,14 +161,20 @@ Estimator::Estimator(Spins* const _spins, Bonds* const _bonds){
     }}
 
 /*****************************************************************************
-* Accumulate measurements
+* Accumulate measurements of estimators that are based on wordlines and list length
 *****************************************************************************/
 void Estimator::Accumulate(vector<vector<long>>& worldLines, long n){
-    counter += 1;
+    counter += 1;   // measurements' counter
+    
+    // List length 
+    an += n;       
+    
+    // Time-evolved Sx site operator 
     for (auto ispin=0; ispin!=Nspins; ispin++){
         aSxs[ispin] += worldLines[ispin].size(); 
     }
 
+    // Time-evolved Sz site operator 
     vector<long>* wl;
     long spinT;
     for (auto ispin=0; ispin!=Nspins; ispin++){
@@ -182,6 +188,7 @@ void Estimator::Accumulate(vector<vector<long>>& worldLines, long n){
         aSzs[ispin] += (1.0*spinT*spins->getSpin(ispin)+1.0*(spins->getSpin(ispin)))/((float) n+1.0);
     }
 
+    // Time-evolved SzSz bond operator 
     int  s0; int  s1;
     int is0; int is1;
     for (auto ibond=0; ibond!=Nbonds; ibond++){
@@ -192,14 +199,17 @@ void Estimator::Accumulate(vector<vector<long>>& worldLines, long n){
         aSzSzs[ibond] += (1.0*s0*s1*DotProduct(worldLines[is0], worldLines[is1]))/((float) n); 
     }
 
+    // Sx operator at 0'th slice
     for (auto ispin=0; ispin!=Nspins; ispin++){
         if (worldLines[ispin][0]==1) aSxs_0slice[ispin] += n;
     }
     
+    // Sz operator at 0'th slice
     for (auto ispin=0; ispin!=Nspins; ispin++){
         aSzs_0slice[ispin] += spins->getSpin(ispin);
     }
 
+    // SzSz operator at 0'th slice
     for (auto ibond=0; ibond!=Nbonds; ibond++){
         is0 = bonds->getBond(ibond)->getSiteA();
         is1 = bonds->getBond(ibond)->getSiteB();
@@ -215,6 +225,7 @@ void Estimator::Accumulate(vector<vector<long>>& worldLines, long n){
 *****************************************************************************/
 void Estimator::Reset(){    
     counter = 0;
+    an = 0;
     fill(aSxs.begin(),   aSxs.end(),   0);
     fill(aSzs.begin(),   aSzs.end(),   0);
     fill(aSzSzs.begin(), aSzSzs.end(), 0);

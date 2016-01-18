@@ -24,9 +24,9 @@ class tWrapTFIM{
             void ODMove();
             void Adjust();
             void Measure(py::list Zs,  py::list Xs,  py::list ZZs); 
-            void Measure(py::list E,   py::list n, 
-                         py::list Zs,  py::list Xs,  py::list ZZs, 
-                         py::list Z0s, py::list X0s, py::list ZZ0s);
+            //void Measure(py::list E,   py::list n, 
+            //             py::list Zs,  py::list Xs,  py::list ZZs, 
+            //             py::list Z0s, py::list X0s, py::list ZZ0s);
             Spins* spins;
             Bonds* bonds;
             TFIM*  tfim;
@@ -127,44 +127,44 @@ void tWrapTFIM::Measure(py::list Zs, py::list Xs, py::list ZZs){
 // --------------------------------------------------------------------------
 // Measure averages of interest. Accumulating variables are reset in the end.
 // -------------------------------------------------------------------------- 
-void tWrapTFIM::Measure(py::list E, py::list n, py::list Zs, py::list Xs, py::list ZZs, py::list Z0s, py::list X0s, py::list ZZ0s){
-    
-    Estimator* MCest = tfim->getEstimator();
-    float nMeas = 1.0*MCest->getCount();
-
-    n.append(MCest->getAn()/nMeas);
-    E.append(-1.0*MCest->getAn()/(nMeas*NSpins)/beta+tfim->getTDiagOffset()/(1.0*NSpins));
-
-    int i=0;
-    for (auto &Sx: *(MCest->getSxs())){
-         Xs.append(-1.0*Sx/(nMeas*Xfield[i]*beta));
-         i++;
-    } 
-
-    for (auto &Sz: *(MCest->getSzs())){
-         Zs.append(1.0*Sz/nMeas);
-    } 
-
-    for (auto &SzSz: *(MCest->getSzSzs())){
-         ZZs.append(1.0*SzSz/nMeas);
-    } 
-
-    i=0;
-    for (auto &Sx: *(MCest->getSx0s())){
-         X0s.append(-1.0*Sx/(nMeas*Xfield[i]*beta));
-         i++;
-    } 
-
-    for (auto &Sz: *(MCest->getSz0s())){
-         Z0s.append(1.0*Sz/nMeas);
-    } 
-
-    for (auto &SzSz: *(MCest->getSzSz0s())){
-         ZZ0s.append(1.0*SzSz/nMeas);
-    } 
-
-    tfim->resetMeas();
-}
+//void tWrapTFIM::Measure(py::list E, py::list n, py::list Zs, py::list Xs, py::list ZZs, py::list Z0s, py::list X0s, py::list ZZ0s){
+//    
+//    Estimator* MCest = tfim->getEstimator();
+//    float nMeas = 1.0*MCest->getCount();
+//
+//    n.append(MCest->getAn()/nMeas);
+//    E.append(-1.0*MCest->getAn()/(nMeas*NSpins)/beta+tfim->getTDiagOffset()/(1.0*NSpins));
+//
+//    int i=0;
+//    for (auto &Sx: *(MCest->getSxs())){
+//         Xs.append(-1.0*Sx/(nMeas*Xfield[i]*beta));
+//         i++;
+//    } 
+//
+//    for (auto &Sz: *(MCest->getSzs())){
+//         Zs.append(1.0*Sz/nMeas);
+//    } 
+//
+//    for (auto &SzSz: *(MCest->getSzSzs())){
+//         ZZs.append(1.0*SzSz/nMeas);
+//    } 
+//
+//    i=0;
+//    for (auto &Sx: *(MCest->getSx0s())){
+//         X0s.append(-1.0*Sx/(nMeas*Xfield[i]*beta));
+//         i++;
+//    } 
+//
+//    for (auto &Sz: *(MCest->getSz0s())){
+//         Z0s.append(1.0*Sz/nMeas);
+//    } 
+//
+//    for (auto &SzSz: *(MCest->getSzSz0s())){
+//         ZZ0s.append(1.0*SzSz/nMeas);
+//    } 
+//
+//    tfim->resetMeas();
+//}
 
 // ------------------------------------------------------------------------ 
 // Destructor 
@@ -206,6 +206,7 @@ BOOST_PYTHON_MODULE(tfim){
         .def("DMove",   &tWrapTFIM::DMove)
         .def("ODMove",  &tWrapTFIM::ODMove)
         .def("Adjust",  &tWrapTFIM::Adjust)
+        //.def("Measure", &tWrapTFIM::Measure)
         .def("Measure", &tWrapTFIM::Measure)
     ;
 }

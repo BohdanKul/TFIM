@@ -49,14 +49,15 @@ class TFIM: public RandomBase
                                    // off-diagonal update
         void AdjustM();            // adjust the operator list length
         bool AdjustLoopsN();       // adjust the number of built loops
-        void Measure();            // accumulate estimator measurements
+        void Record ();            // record measurement averages
+        void resetMeas();          // reset measurement variables to default values
         void Measure(int sampleInd, double* aEnergy, double* aMagnetization); // accumulate estimator measurements and populate output arrays
-
+        Estimator* getEstimator(){ return &estimator;};
+        float      getTDiagOffset(){return tdiagOffset;};
     private:
         Spins& spins;
         Bonds& bonds;
         
-        void resetMeas();         // reset measurement variables to default values
         void computeDiagProb();       // compute diagonal operators insertation probabilities
         
         void printIntVector(vector<int>* vect, string name );
