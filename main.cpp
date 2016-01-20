@@ -174,19 +174,17 @@ int main(int argc, char *argv[])
         fstream fInter (params["inter"].as<string>(), ios_base::in);
         // Buffer variables
         string         sbuf;
-        istringstream  ssbuf;
 
         // Read the first line containing no information
         getline(fInter, sbuf);
 
         // Read the second line with the header
         getline(fInter, sbuf);
-        ssbuf.str(sbuf);
+        istringstream  ssbuf(sbuf.substr(1));
 
         // Record the number of various fields, bonds
         int nSz = 0;       int nSx=0;    int nSzSz=0;
         ssbuf >> nSz; ssbuf >> nSx; ssbuf >> nSzSz;
-        cout << " # Sz " << nSz << " # Sx " << nSx << " # SzSz " << nSzSz << endl; 
         
         // Read off interaction values line by line
         int   siteA;
