@@ -196,7 +196,7 @@ void Estimator::Accumulate(vector<vector<long>>& worldLines, long n){
         is1 = bonds->getBond(ibond)->getSiteB();
         s0  = spins->getSpin(is0);
         s1  = spins->getSpin(is1);
-        aSzSzs[ibond] += (1.0*s0*s1*DotProduct(worldLines[is0], worldLines[is1]))/((float) n); 
+        aSzSzs[ibond] += (1.0*s0*s1*DotProduct(worldLines[is0], worldLines[is1])+1.0*s0*s1)/((float) n+1.0); 
     }
 
     // Sx operator at 0'th slice
