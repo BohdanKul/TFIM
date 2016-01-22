@@ -40,24 +40,27 @@ def detTotalBins(errs, weights, r, bins):
         treshold. The later is controlled by r. It is a fraction < 1 and 
         is computed for each average considered in the simulation. The 
         estimate is obtained with the help of Lagrange multipliers 
-        method. The function to minize is sum(bins/r2s) that is the estimate
-        of the total number of bins. '''
+        method. The function to minize is sum(bins/r2s) - an estimate
+        of the total number of bins required to achieve convergence. '''
     print 'bins:    ', bins
-    print 'weights: ', weights
+    print 'weights: ', weights.T
     print 'errors:  ', errs
     print 'r:       ', r
     bins = np.transpose(np.atleast_2d(np.array(bins)))           # convert vector to column-shaped
     iLambda = np.sum((errs*errs*r*r*weights*weights),   axis=0)  # compute Lagrange multiplier
-    iLambda/= np.sum(errs*np.abs(weights)*(np.sqrt(bins)), axis=0) 
+    iLambda/= np.sum(errs*np.abs(weights)*np.sqrt(bins), axis=0) 
     r2s     = np.sqrt(bins)/(np.abs(weights)*errs)*iLambda               
     
-    print 'r2s:    ', r2s
+    #print 'r2s:    ', r2s
     maxr2s = np.amin(r2s, axis=1)    # find the smallest ones
-    print 'maxr2s: ', maxr2s
+    #print 'maxr2s: ', maxr2s
     # compute
-    tbins  = np.ceil(np.transpose(np.atleast_2d(bins))/maxr2s)
-    print 'tbins: ', tbins
-    return np.squeeze(tbins).tolist()
+    bins   = np.squeeze(np.transpose(np.atleast_2d(bins)))
+    tbins  = np.squeeze(np.ceil(bins/maxr2s))
+    print 'bins:  ', tbins
+    maxbins = 10000
+    tbins = np.minimum(tbins, bins+np.ones_like(tbins)*maxbins)
+    return tbins.tolist()
 
 
 # ----------------------------------------------------------------------
@@ -91,6 +94,9 @@ def main():
     (gHs, gDs, gJs, bonds) = (np.array([]), np.array([]), np.array([]), np.array([]))  
     if (args['inter'] is not None):
         gHs, gDs, gJs, bonds = Hfile.LoadInters(args['inter'])
+        gHs = gHs[:, -1]
+        gDs = gDs[:, -1]
+        gJs = gJs[:, -1]
         Ns = len(gHs)
     else:
         print "Error: enter interaction file"
@@ -102,26 +108,32 @@ def main():
         t.append((l[0],l[1]))
     bonds = t
     Nb = len(bonds) 
-    
+   
     # Generate initial guess for the couplings---------------------------------
+    np.random.seed(args['seed'])
     Hs = np.random.randn(Ns)*max([max(gHs),0.5])+gHs
-    Ds = np.abs(np.random.randn(Ns)*max([max(gDs),0.5]))+gDs
+    Ds = np.abs(np.random.randn(Ns)*max([max(gDs),0.1]))+gDs
     Js = np.random.randn(Nb)*max([max(gJs),0.5])+gJs
     
+
     # Obtain or generate a training dataset -----------------------------------
     data, weights = Hfile.GetData(args['data'], Ns, args['seed'], 10000, bonds, gHs, gDs, gJs, beta) 
-    data    = data[:2]
-    weights = weights[:2]
+    data    = data
+    weights = weights
     data += [[]]          # add a vector with no bits clamped
     Nd = len(data)
     weights = np.append(weights, -beta) # and its weight
     weights = weights.reshape((Nd,1))  # take a transpose
     #weights = np.transpose(np.atleast_2d(weights))# take a transpose
     
+    print gHs, gDs, gJs
+    print data
+    print weights
     # Set up MC constants------------------------------------------------------ 
     mSlice = 1025  # minimum number of bins to take in attempt to converge the autocorrelation
-    tol = 0.1      # fractional error tolerance in estimation of the gradient
-    
+    tol  = 0.1      # fractional error tolerance in estimation of the gradient
+    prec = 0.01     # gradient resolution below which it is considered to be converged 
+
     # Set up gradient descent constants----------------------------------------
     a, b = IPschedule(0.9/beta, 0.1/beta, 200)
     Norm = 100.0 # gradient norm 
@@ -151,6 +163,7 @@ def main():
         # run MC until the error is converged and is below the error tolerance level
         while isAutoCorr or isUncertain:
             # for each vector in dataset
+            print "\n\n------------------------------------------------------------" 
             for i in range(Nd):
                 # run a pre-determined number of measurements
                 while (bins[i] < mtargets[i]):
@@ -190,31 +203,39 @@ def main():
                 # compute the gradient components averages and errors
                 gval = np.sum((aves*weights),  axis=0)
                 gerr = np.sqrt(np.sum((errs*errs*weights*weights), axis=0))
-                
+                print "gradient: ", gval
+                print "gerror:   ", gerr
+                print "fraction: ", gval*tol/gerr
+
                 # determine the indices of averages falling below the tolerance treshold 
                 #indices = ma.getmask(ma.masked_where(gval*tol-gerr < 0, ))
-                print 'bins:    ', bins
-                print 'targets: ', mtargets 
-                print 'errors:  ', errs[errs<0]
-                indices = np.squeeze(np.where(gval*tol-gerr < 0))
+                #indices = np.squeeze(np.where(np.abs(gval)*tol-gerr < 0))
+                indices  = np.squeeze(np.where(np.all([
+                                                        np.abs(gval)*tol-gerr < 0,
+                                                        np.abs(gval)    -prec > 0 
+                                                      ], axis=0)
+                                               )
+                                     )  
+                print "indices:   ", indices
+                if  indices.shape == (): indices = np.array([indices])
+
                 # if there are no such averages, signal that the errors are within tolerance bounds
                 if len(indices) == 0: isUncertain = False
                 # otherwise, estimate how many more bins to take
                 else: mtargets = detTotalBins(errs[:, indices], weights, (np.abs(gval)*tol/gerr)[indices], bins)
                 
-                return 0
         # Destroy MC solvers -----------------------------------------------------
-        for i in range(len(TFIMs)):
-            del TFIMs[i]
+        for j in reversed(range(Nd)):
+            del TFIMs[j]
         
         # Annealing constant 
         eta   = a/(b+1.0*step)
 
         # Follow the negative gradient 
-        (dZ, dX, dZZ) = np.split(gval, [Ns, Ns+Ns])    
-        Zs   += -eta*dZ
-        Xs   += -eta*dX
-        ZZs  += -eta*dZZ
+        (dH, dD, dJ) = np.split(gval, [Ns, Ns+Ns])    
+        Hs   += -eta*dH
+        Ds   += -eta*dD
+        Js   += -eta*dJ
 
     colors = ["#66CAAE", "#CF6BDD", "#E27844", "#7ACF57", "#92A1D6", "#E17597", "#C1B546",'b']
     #fig = py.figure(1,figsize=(13,6))
