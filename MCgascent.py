@@ -1,7 +1,8 @@
 import pylab    as py
 import numpy    as np
 import numpy.ma as ma
-import kevent, argparse, tfim, MCstat, Hbuilder, Hfile
+import numpy.random as rm
+import kevent, argparse, tfim, MCstat, Hbuilder, Hfile, bmachine
 
 #------------------------------------------------------------------------------
 # Inversly-proportional annealing schedule.
@@ -57,10 +58,12 @@ def detTotalBins(errs, weights, r, bins):
     # compute
     bins   = np.squeeze(np.transpose(np.atleast_2d(bins)))
     tbins  = np.squeeze(np.ceil(bins/maxr2s))
-    print 'bins:  ', tbins
+    print 'projected bins: ', tbins
     maxbins = 10000
-    tbins = np.minimum(tbins, bins+np.ones_like(tbins)*maxbins)
-    return tbins.tolist()
+    tbins = np.asarray(np.minimum(tbins, bins+np.ones_like(tbins)*maxbins))
+    tbins = tbins.tolist()
+    if isinstance(tbins, float): tbins = [tbins]
+    return tbins
 
 
 # ----------------------------------------------------------------------
@@ -79,25 +82,24 @@ def simpleMovingAverage(period,data):
 # ----------------------------------------------------------------------
 def main(): 
 
+    modes = ['aquant', 'equant'] 
     # setup the command line parser options 
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--data',       help='Data file',                  type=str)
-    parser.add_argument('--seed',       help='Seed used to generate data', type=int, default=0)
     parser.add_argument('--inter','-I', help='Interactions file',          type=str)
-    parser.add_argument('--beta', '-b', help='Inverse temperature ',       type=float)
+    parser.add_argument('--seed',       help='Seed used to generate data', type=int,   default=0)
+    parser.add_argument('--beta', '-b', help='Inverse temperature ',       type=float, default=1.0)
+    parser.add_argument('--mode', '-m', help='Training mode',           choices=modes, default='aquant')
     args = vars(parser.parse_args())
 
     
     # Load data generating Hamiltonian ----------------------------------------
     beta = args['beta']
     Ns   = 0
-    (gHs, gDs, gJs, bonds) = (np.array([]), np.array([]), np.array([]), np.array([]))  
+    (Hs, Ds, Js, bonds) = (np.array([]), np.array([]), np.array([]), np.array([]))  
     if (args['inter'] is not None):
-        gHs, gDs, gJs, bonds = Hfile.LoadInters(args['inter'])
-        gHs = gHs[:, -1]
-        gDs = gDs[:, -1]
-        gJs = gJs[:, -1]
-        Ns = len(gHs)
+        Hs, Ds, Js, bonds = Hfile.LoadInters(args['inter'])
+        Ns = len(Hs)
     else:
         print "Error: enter interaction file"
         return 1
@@ -111,13 +113,18 @@ def main():
    
     # Generate initial guess for the couplings---------------------------------
     np.random.seed(args['seed'])
-    Hs = np.random.randn(Ns)*max([max(gHs),0.5])+gHs
-    Ds = np.abs(np.random.randn(Ns)*max([max(gDs),0.1]))+gDs
-    Js = np.random.randn(Nb)*max([max(gJs),0.5])+gJs
+    #Hs = np.random.randn(Ns)*max([max(Hs),0.5])+Hs
+    #Ds = np.abs(np.random.randn(Ns)*max([max(Ds),0.1]))+Ds
+    #Js = np.random.randn(Nb)*max([max(Js),0.5])+Js
+    
+    Hs[:,-1] = (rm.rand(Ns)-0.5)*0.1
+    Js[:,-1] = (rm.rand(Nb)-0.5)*0.1
+    Ds[:,-1] = np.ones(Ns) * 2.0
     
 
     # Obtain or generate a training dataset -----------------------------------
-    data, weights = Hfile.GetData(args['data'], Ns, args['seed'], 10000, bonds, gHs, gDs, gJs, beta) 
+    # Vectors in a dataset are assumed to be a series of 0,1 (Python convention)
+    data, weights = Hfile.GetData(args['data'], Ns, args['seed'], 10000, bonds, Hs, Ds, Js, beta) 
     data    = data
     weights = weights
     data += [[]]          # add a vector with no bits clamped
@@ -125,12 +132,27 @@ def main():
     weights = np.append(weights, -beta) # and its weight
     weights = weights.reshape((Nd,1))  # take a transpose
     #weights = np.transpose(np.atleast_2d(weights))# take a transpose
+   
+    gval   = np.zeros(Ns+Ns+Nb) # the gradient 
+    gpos   = np.zeros(Ns+Ns+Nb) # positive contribution to the gradient
     
-    print gHs, gDs, gJs
-    print data
-    print weights
+    # It can be computed exactly in the classical and inequality quantum trainings
+    if args['mode'] == 'aquant':
+        dstats = np.zeros((Nd-1, Ns+Ns+Nb))
+        for i, cbits in enumerate(data[:-1]):
+            dstats[i, :Ns] = -1.0*(np.array(cbits)*2-1)*beta
+            for j,bond in enumerate(bonds): 
+                dstats[i, 2*Ns+j] = (cbits[bond[0]]*2-1)*(cbits[bond[1]]*2-1)*beta
+        gpos = np.sum(dstats*weights[:-1, :], axis=0)
+
+        # Get rid of data we don't need to work with anymore,
+        # leave only the identity projector 
+        data = [data[-1]]
+        weights = np.array(weights[-1, 0]) 
+        Nd = 1
+        
     # Set up MC constants------------------------------------------------------ 
-    mSlice = 1025  # minimum number of bins to take in attempt to converge the autocorrelation
+    mSlice = 1025   # minimum number of bins to take in attempt to converge the autocorrelation
     tol  = 0.1      # fractional error tolerance in estimation of the gradient
     prec = 0.01     # gradient resolution below which it is considered to be converged 
 
@@ -140,9 +162,19 @@ def main():
     step = 0     # step in gradient descent
     nsteps = 1000
 
-    # the gradient
-    gval = np.zeros(len(gHs)+len(gDs)+len(gJs)) 
-    subset = range(Nd)
+    subset  = range(Nd)
+    
+    # Identify the indices of trained parameters to nulify in the gradient
+    if   args['mode']=='equant': tparams = np.ones(Ns+Ns+Nb)
+    elif args['mode']=='aquant': tparams = np.hstack([np.ones(Ns), np.zeros(Ns), np.ones(Nb)])
+
+    print 'gpos: ', gpos
+    print 'grad: ', gval
+    print 'Hs:   ', Hs[:,-1]
+    print 'Ds:   ', Ds[:,-1]
+    print 'Js:   ', Js[:,-1]
+    print 'mask: ', tparams
+
 
     # Gradient descent --------------------------------------------------------
     while ((step < nsteps) and (Norm > 0.00001)):
@@ -151,7 +183,7 @@ def main():
         TFIMs = []                      # list of MC objects, one for each data vector
         (Zs,   Xs,  ZZs) = ([], [], []) # lists of raw measurements for each data vector
         for vector in data:
-            TFIMs.append(tfim.TFIM(vector, bonds, Hs.tolist(), Ds.tolist(), Js.tolist(), Ns,beta, 1))
+            TFIMs.append(tfim.TFIM(vector, bonds, Hs[:,-1].tolist(), Ds[:,-1].tolist(), Js[:,-1].tolist(), Ns,beta, 1))
             Zs.append([]); Xs.append([]); ZZs.append([])
          
         # Reset necessary datastructures ------------------------------------------
@@ -160,6 +192,8 @@ def main():
         (eZs, eXs, eZZs) = (np.zeros((Nd, Ns)), np.zeros((Nd, Ns)), np.zeros((Nd, Nb)))  # and errors   
         (isAutoCorr, isUncertain) = (True, True) # flags controlling simulation runtime
 
+        print 'bins:    ', bins
+        print 'targets: ', mtargets
         # run MC until the error is converged and is below the error tolerance level
         while isAutoCorr or isUncertain:
             # for each vector in dataset
@@ -201,11 +235,10 @@ def main():
                 errs = np.hstack([eZs, eXs, eZZs])
                 
                 # compute the gradient components averages and errors
-                gval = np.sum((aves*weights),  axis=0)
-                gerr = np.sqrt(np.sum((errs*errs*weights*weights), axis=0))
+                gval = gpos+np.sum((aves*weights),  axis=0)*tparams
+                gerr = np.sqrt(np.sum((errs*errs*weights*weights), axis=0))*tparams
                 print "gradient: ", gval
                 print "gerror:   ", gerr
-                print "fraction: ", gval*tol/gerr
 
                 # determine the indices of averages falling below the tolerance treshold 
                 #indices = ma.getmask(ma.masked_where(gval*tol-gerr < 0, ))
@@ -222,10 +255,10 @@ def main():
                 # if there are no such averages, signal that the errors are within tolerance bounds
                 if len(indices) == 0: isUncertain = False
                 # otherwise, estimate how many more bins to take
-                else: mtargets = detTotalBins(errs[:, indices], weights, (np.abs(gval)*tol/gerr)[indices], bins)
+                else: mtargets = detTotalBins(errs[:, indices], weights, np.abs(gval)[indices]*tol/gerr[indices], bins)
                 
         # Destroy MC solvers -----------------------------------------------------
-        for j in reversed(range(Nd)):
+        for j in reversed(range(len(TFIMs))):
             del TFIMs[j]
         
         # Annealing constant 
@@ -233,9 +266,9 @@ def main():
 
         # Follow the negative gradient 
         (dH, dD, dJ) = np.split(gval, [Ns, Ns+Ns])    
-        Hs   += -eta*dH
-        Ds   += -eta*dD
-        Js   += -eta*dJ
+        Hs[:,-1] += -eta*dH
+        Ds[:,-1] += -eta*dD
+        Js[:,-1] += -eta*dJ
 
     colors = ["#66CAAE", "#CF6BDD", "#E27844", "#7ACF57", "#92A1D6", "#E17597", "#C1B546",'b']
     #fig = py.figure(1,figsize=(13,6))
