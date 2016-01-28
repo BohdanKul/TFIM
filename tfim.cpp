@@ -23,7 +23,7 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
     float diagOffset; 
     debug = false;
 
-    cout << endl <<  "=== Computing SSE vertices ===" << endl;
+    //cout << endl <<  "=== Computing SSE vertices ===" << endl;
     vector<int>  solTypes;
     array<float, 16> VWeights;         // vertex weigths for each bond
     
@@ -31,7 +31,7 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
     array<bool, 4> clampedLegs;
     // For each bond
     for (auto ibond=0; ibond!=Nbonds; ibond++){
-        cout << "---Bond " << ibond << ":"<< endl; 
+        //cout << "---Bond " << ibond << ":"<< endl; 
         // Increament main data structures
         array<array<array<float, 8>, 16*8>, 16> initP;
         VProb.push_back(initP);
@@ -59,7 +59,7 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
             d2  = _xfield->at(siteB)/(1.0*nB);
         }
 
-        cout << "   A: " << siteA << " B: " << siteB << " J: " << J12 << "; h: (" << h1 << ", " << h2 << "); d: (" << d1 << ", " << d2 << "); Z: (" << nA << ", " << nB <<")" << endl;
+        //cout << "   A: " << siteA << " B: " << siteB << " J: " << J12 << "; h: (" << h1 << ", " << h2 << "); d: (" << d1 << ", " << d2 << "); Z: (" << nA << ", " << nB <<")" << endl;
 
         // Redefine diagonal operators by flipping their sign
         J12 = -J12;
@@ -69,17 +69,17 @@ TFIM::TFIM(Spins* const _spins, Bonds* const _bonds,
         // Get the list of possible vertices on the current bond  
         getVertices(J12, h1, h2, d1, d2, diagOffset, VWeights, dWeights[ibond]);
         
-        cout << "   all  Ws: ";
-        for (int j=0; j!=16; j++)
-            printf("%4.2f ", VWeights[j]) ;
-        cout << endl;
+        //cout << "   all  Ws: ";
+        //for (int j=0; j!=16; j++)
+        //    printf("%4.2f ", VWeights[j]) ;
+        //cout << endl;
 
-        cout << "   diag Ws: ";
-        for (int j=0; j!=4; j++)
-            printf("%4.2f ", dWeights[ibond][j]) ;
-        cout << endl;
+        //cout << "   diag Ws: ";
+        //for (int j=0; j!=4; j++)
+        //    printf("%4.2f ", dWeights[ibond][j]) ;
+        //cout << endl;
 
-        cout << "   C: " << diagOffset << endl;
+        //cout << "   C: " << diagOffset << endl;
         
         // Accumulate the total diagonal offset
         tDiagOffset += diagOffset;      
@@ -215,10 +215,10 @@ void TFIM::computeDiagProb()
         }
    
     
-    cout << endl << "=== Diagonal insertion probabilities ===" << endl << "   ";
-    for (auto dp=diagProb.begin(); dp!=diagProb.end(); dp++)
-        printf("%4.3f; ", *dp);
-    cout << endl << endl;
+    //cout << endl << "=== Diagonal insertion probabilities ===" << endl << "   ";
+    //for (auto dp=diagProb.begin(); dp!=diagProb.end(); dp++)
+    //    printf("%4.3f; ", *dp);
+    //cout << endl << endl;
 
 }
  

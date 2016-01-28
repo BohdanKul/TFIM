@@ -19,13 +19,13 @@ Spins::Spins(int _Nspins, long _seed)
         *spin = pow(-1,rand.uRandInt()%2);                         
     }
 
-    cout << endl << "=== Spins initialization ===" << endl;
-    cout << "   spins #: " << Nspins << " Fully unclamped" <<  endl;
-    cout << "   state  : ";
-    for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
-        cout << *spin << " "; 
-    }
-    cout << endl << endl;
+    //cout << endl << "=== Spins initialization ===" << endl;
+    //cout << "   spins #: " << Nspins << " Fully unclamped" <<  endl;
+    //cout << "   state  : ";
+    //for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
+    //    cout << *spin << " "; 
+    //}
+    //cout << endl << endl;
 
 }
 
@@ -54,13 +54,13 @@ Spins::Spins(int _Nspins, long _seed, vector<int>& _clamped)
         }
     }
 
-    cout << endl << "=== Spins initialization ===" << endl;
-    cout << "   spins #: " << Nspins << " clamped" <<  endl;
-    cout << "   state  : ";
-    for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
-        cout << *spin << " "; 
-    }
-    cout << endl << endl;
+    //cout << endl << "=== Spins initialization ===" << endl;
+    //cout << "   spins #: " << Nspins << " clamped" <<  endl;
+    //cout << "   state  : ";
+    //for (auto spin=spins.begin(); spin!=spins.end(); spin++) {                          
+    //    cout << *spin << " "; 
+    //}
+    //cout << endl << endl;
 
 }
 

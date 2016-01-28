@@ -61,31 +61,31 @@ tWrapTFIM::tWrapTFIM(py::list dspins, py::list lbonds, py::list Z, py::list X, p
     bonds = new Bonds();
     int siteA; int siteB;
     float strength;
-    cout << "Bonds: " << endl; 
+    //cout << "Bonds: " << endl; 
     for (int i = 0; i < len(lbonds) ; i++){
         py::tuple b = py::extract<py::tuple>(lbonds[i]);
         siteA    = py::extract<int>(b[0]);
         siteB    = py::extract<int>(b[1]);
         strength = py::extract<float>(ZZ[i]);
-        cout << "   " << siteA << " " << siteB << " " << strength << endl;
+        //cout << "   " << siteA << " " << siteB << " " << strength << endl;
         bonds->setBond(siteA, siteB, strength);
     }
 
     vector<float> Zs;
-    cout << "Zs: " ;
+    //cout << "Zs: " ;
     for (int i = 0; i < len(Z) ; i++){
         Zs.push_back(py::extract<float>(Z[i]));
-        cout << Zs[i] << " ";
+        //cout << Zs[i] << " ";
     }
-    cout << endl;
+    //cout << endl;
     
     vector<float> Xs;
-    cout << "Xs: ";
+    //cout << "Xs: ";
     for (int i = 0; i < len(X) ; i++){
         Xs.push_back(py::extract<float>(X[i]));
-        cout << Xs[i] << " ";
+        //cout << Xs[i] << " ";
     }
-    cout << endl;
+    //cout << endl;
     
     vector<float> ZZs;
     for (int i = 0; i < len(ZZ) ; i++){

@@ -284,17 +284,17 @@ long Estimator::DotProduct(vector<long>& v1, vector<long>& v2){
 * Print out accumulated variables 
 *****************************************************************************/
 void Estimator::print(){
-    cout << "Szs: " << endl;
-    for (int i=0; i!=Nspins; i++)
-        cout << aSzs[i] << " ";
+    //cout << "Szs: " << endl;
+    //for (int i=0; i!=Nspins; i++)
+    //    cout << aSzs[i] << " ";
 
-    cout << endl << "Sxs: " << endl;
-    for (int i=0; i!=Nspins; i++)
-        cout << aSxs[i] << " ";
+    //cout << endl << "Sxs: " << endl;
+    //for (int i=0; i!=Nspins; i++)
+    //    cout << aSxs[i] << " ";
 
-    cout << endl << "SzSzs: " << endl;
-    for (int i=0; i!=Nbonds; i++)
-        cout << aSzSzs[i] << " ";
-    cout << endl;
+    //cout << endl << "SzSzs: " << endl;
+    //for (int i=0; i!=Nbonds; i++)
+    //    cout << aSzSzs[i] << " ";
+    //cout << endl;
 }
 
