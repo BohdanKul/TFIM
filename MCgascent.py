@@ -121,7 +121,6 @@ def main():
     Js[:,-1] = (rm.rand(Nb)-0.5)*0.1
     Ds[:,-1] = np.ones(Ns) * 2.0
     
-
     # Obtain or generate a training dataset -----------------------------------
     # Vectors in a dataset are assumed to be a series of 0,1 (Python convention)
     data, weights = Hfile.GetData(args['data'], Ns, args['seed'], 10000, bonds, Hs, Ds, Js, beta) 
@@ -132,6 +131,10 @@ def main():
     weights = np.append(weights, -beta) # and its weight
     weights = weights.reshape((Nd,1))  # take a transpose
     #weights = np.transpose(np.atleast_2d(weights))# take a transpose
+    
+    # Keep a copy for the ED solver
+    pdata    = data[:]
+    pweights = np.copy(weights)
    
     gval   = np.zeros(Ns+Ns+Nb) # the gradient 
     gpos   = np.zeros(Ns+Ns+Nb) # positive contribution to the gradient
@@ -153,8 +156,10 @@ def main():
         
     # Set up MC constants------------------------------------------------------ 
     mSlice = 1025   # minimum number of bins to take in attempt to converge the autocorrelation
-    tol  = 0.1      # fractional error tolerance in estimation of the gradient
-    prec = 0.01     # gradient resolution below which it is considered to be converged 
+    gtol  = 0.10    # fractional error tolerance in estimation of the gradient
+    etol  = 0.08    # tolerance  
+    prec  = 0.01    # gradient resolution below which it is considered to be converged 
+    
 
     # Set up gradient descent constants----------------------------------------
     a, b = IPschedule(0.9/beta, 0.1/beta, 200)
@@ -170,23 +175,41 @@ def main():
 
     print 'gpos: ', gpos
     print 'grad: ', gval
-    print 'Hs:   ', Hs[:,-1]
-    print 'Ds:   ', Ds[:,-1]
-    print 'Js:   ', Js[:,-1]
     print 'mask: ', tparams
 
 
     # Gradient descent --------------------------------------------------------
     while ((step < nsteps) and (Norm > 0.00001)):
+        eta   = a/(b+1.0*step)
+        
+        print 'Hs:   ', Hs[:,-1]
+        print 'Ds:   ', Ds[:,-1]
+        print 'Js:   ', Js[:,-1]
     
-        # Initiate MC solvers -----------------------------------------------------
+        # Initiate ED solver --------------------------------------------------
+        kwargs = {'X': Ds, 'Z1': Hs, 'Z2': Js}
+        BM = bmachine.BoltzmannMachine(Ns, beta, **kwargs)
+    
+        # Evaluate log-likelihood
+        vLL = 0
+        for k,cbits in enumerate(pdata[:-1]):
+            BM.setProjector(cbits)
+            vLL -= np.log(np.real(BM.evaluateProjector())) * pweights[k]
+        
+        print 'ED LL:   ', vLL 
+        BM.setProjector([])
+        edAves = BM.computeLocalAverages()*pweights[-1]
+        print 'ED grad: ', gpos + edAves
+        del BM
+
+        # Initiate MC solvers -------------------------------------------------
         TFIMs = []                      # list of MC objects, one for each data vector
         (Zs,   Xs,  ZZs) = ([], [], []) # lists of raw measurements for each data vector
         for vector in data:
             TFIMs.append(tfim.TFIM(vector, bonds, Hs[:,-1].tolist(), Ds[:,-1].tolist(), Js[:,-1].tolist(), Ns,beta, 1))
             Zs.append([]); Xs.append([]); ZZs.append([])
          
-        # Reset necessary datastructures ------------------------------------------
+        # Reset necessary datastructures --------------------------------------
         (bins, mtargets) = (np.zeros(Nd), mSlice*np.ones(Nd)) # bins taken and total number of bins to take 
         (aZs, aXs, aZZs) = (np.zeros((Nd, Ns)), np.zeros((Nd, Ns)), np.zeros((Nd, Nb)))  # estimators' averages
         (eZs, eXs, eZZs) = (np.zeros((Nd, Ns)), np.zeros((Nd, Ns)), np.zeros((Nd, Nb)))  # and errors   
@@ -196,6 +219,8 @@ def main():
         print 'targets: ', mtargets
         # run MC until the error is converged and is below the error tolerance level
         while isAutoCorr or isUncertain:
+            
+            
             # for each vector in dataset
             print "\n\n------------------------------------------------------------" 
             for i in range(Nd):
@@ -207,8 +232,9 @@ def main():
                                TFIMs[i].Adjust()       # adjust its length 
                                bins[i] = 0             # set bin count to zero
                                (Zs[i], Xs[i], ZZs[i]) = ([], [], []) # reset timeseries
+                               (bins, mtargets) = (np.zeros(Nd), mSlice*np.ones(Nd))
                                isAutoCorr = True       # signal possible autocorrelation 
-                        # off-diagonal update
+                           # off-diagonal update
                         TFIMs[i].ODMove()
                     
                     # take a measurement with the help of auxilary variables
@@ -235,40 +261,46 @@ def main():
                 errs = np.hstack([eZs, eXs, eZZs])
                 
                 # compute the gradient components averages and errors
-                gval = gpos+np.sum((aves*weights),  axis=0)*tparams
+                mcAves = np.sum((aves*weights),  axis=0)*tparams
+                gval = gpos + mcAves
                 gerr = np.sqrt(np.sum((errs*errs*weights*weights), axis=0))*tparams
+                print "eta:      ", eta
+                print "LL:       ", vLL
                 print "gradient: ", gval
+                print "exact:    ", (gpos+edAves)*tparams
+                #print "MC aves:  ", mcAves
+                #print 'ED aves:  ', edAves 
                 print "gerror:   ", gerr
 
                 # determine the indices of averages falling below the tolerance treshold 
-                #indices = ma.getmask(ma.masked_where(gval*tol-gerr < 0, ))
-                #indices = np.squeeze(np.where(np.abs(gval)*tol-gerr < 0))
+                #indices = ma.getmask(ma.masked_where(gval*gtol-gerr < 0, ))
+                #indices = np.squeeze(np.where(np.abs(gval)*gtol-gerr < 0))
                 indices  = np.squeeze(np.where(np.all([
-                                                        np.abs(gval)*tol-gerr < 0,
-                                                        np.abs(gval)    -prec > 0 
+                                                        np.abs(gval)*gtol-gerr < 0,
+                                                        np.abs(gval)     -prec > 0
                                                       ], axis=0)
                                                )
                                      )  
                 print "indices:   ", indices
                 if  indices.shape == (): indices = np.array([indices])
 
-                # if there are no such averages, signal that the errors are within tolerance bounds
-                if len(indices) == 0: isUncertain = False
+                # if there are no such averages, signal that the errors are within gtolerance bounds
+                if (len(indices) == 0) or (np.amax(gerr)<etol): isUncertain = False
                 # otherwise, estimate how many more bins to take
-                else: mtargets = detTotalBins(errs[:, indices], weights, np.abs(gval)[indices]*tol/gerr[indices], bins)
+                else: mtargets = detTotalBins(errs[:, indices], weights, np.abs(gval)[indices]*gtol/gerr[indices], bins)
                 
         # Destroy MC solvers -----------------------------------------------------
         for j in reversed(range(len(TFIMs))):
             del TFIMs[j]
         
         # Annealing constant 
-        eta   = a/(b+1.0*step)
 
         # Follow the negative gradient 
         (dH, dD, dJ) = np.split(gval, [Ns, Ns+Ns])    
         Hs[:,-1] += -eta*dH
         Ds[:,-1] += -eta*dD
         Js[:,-1] += -eta*dJ
+        step += 1
 
     colors = ["#66CAAE", "#CF6BDD", "#E27844", "#7ACF57", "#92A1D6", "#E17597", "#C1B546",'b']
     #fig = py.figure(1,figsize=(13,6))
